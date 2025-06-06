@@ -24,7 +24,8 @@ export default function SalesScreen() {
     salePrice: '', 
     isParcel: false,
     flavourId: '',
-    addOnId: ''
+    addOnId: '',
+    isCustomPrice: false
   }]);
   const [paymentMode, setPaymentMode] = useState('cash');
   const [products, setProducts] = useState([]);
@@ -117,7 +118,8 @@ export default function SalesScreen() {
       salePrice: '', 
       isParcel: false,
       flavourId: '',
-      addOnId: ''
+      addOnId: '',
+      isCustomPrice: false
     }]);
   };
 
@@ -129,7 +131,8 @@ export default function SalesScreen() {
         salePrice: '', 
         isParcel: false,
         flavourId: '',
-        addOnId: ''
+        addOnId: '',
+        isCustomPrice: false
       }]);
     } else {
       const updatedSales = [...sales];
@@ -175,7 +178,7 @@ export default function SalesScreen() {
       updated[index].addOnId = '';
     }
     
-    if (updated[index].productId) {
+    if (updated[index].productId && !updated[index].isCustomPrice) {
       const product = products.find(p => p.id === parseInt(updated[index].productId));
       if (product) {
         updated[index].salePrice = calculateAmount(updated[index], product);
@@ -243,7 +246,8 @@ export default function SalesScreen() {
           salePrice: '', 
           isParcel: false,
           flavourId: '',
-          addOnId: ''
+          addOnId: '',
+          isCustomPrice: false
         }]);
         setPaymentMode('cash');
       } else {
@@ -386,13 +390,28 @@ export default function SalesScreen() {
               </TouchableOpacity>
             </View>
 
+            <View style={styles.parcelContainer}>
+              <Text style={styles.checkboxLabel}>Custom Price</Text>
+              <TouchableOpacity onPress={() => updateSale(index, 'isCustomPrice', !sale.isCustomPrice)}>
+                <Ionicons
+                  name={sale.isCustomPrice ? 'checkbox-outline' : 'square-outline'}
+                  size={24}
+                  color="#4CAF50"
+                />
+              </TouchableOpacity>
+            </View>
+
             <TextInput
-              style={[styles.input, styles.priceInput]}
+              style={[
+                styles.input,
+                sale.isCustomPrice && styles.priceInput
+              ]}
               placeholder="Sale Price"
               placeholderTextColor="#888"
               keyboardType="numeric"
-              editable={false}
+              editable={sale.isCustomPrice}
               value={sale.salePrice}
+              onChangeText={(value) => updateSale(index, 'salePrice', value)}
             />
           </Animated.View>
         ))}
@@ -506,7 +525,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#fff',
     fontSize: 15,
     color: '#333',
   },
