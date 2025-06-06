@@ -1,46 +1,113 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Tabs, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
-import { IconButton, Menu, Provider as PaperProvider } from 'react-native-paper';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Provider as PaperProvider } from 'react-native-paper';
+import { CustomMenu } from '../../components/ui/CustomMenu';
 
 export default function TabsLayout() {
   const router = useRouter();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const openMenu = () => setMenuVisible(true);
-  const closeMenu = () => setMenuVisible(false);
+  useEffect(() => {
+    checkUserRole();
+  }, []);
 
-  const handleSignOut = () => {
-    closeMenu();
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
-              setTimeout(() => {
-                router.replace('/');
-              }, 100);
-            } catch (error) {
-              console.error('Sign out error:', error);
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
-            }
-          }
+  const checkUserRole = async () => {
+    try {
+      console.log('Checking user role...');
+      const userDataStr = await AsyncStorage.getItem('userData');
+      console.log('Raw userData from storage:', userDataStr);
+      
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        console.log('Parsed userData:', userData);
+        
+        // Check if roles array exists and contains admin role
+        if (userData.roles && Array.isArray(userData.roles)) {
+          const isAdminUser = userData.roles.includes('ROLE_ADMIN') || userData.roles.includes('ROLE_SUPERADMIN');
+          console.log('Is admin?', isAdminUser);
+          setIsAdmin(isAdminUser);
+        } else {
+          console.log('No roles array found in userData');
+          setIsAdmin(false);
         }
-      ],
-      { cancelable: true }
-    );
+      } else {
+        console.log('No userData found in storage');
+        setIsAdmin(false);
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error);
+      setIsAdmin(false);
+    }
   };
+
+  const handleSignOutConfirmed = async () => {
+    try {
+      await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
+      router.replace('/');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'Failed to sign out. Please try again.');
+      }
+    }
+  };
+
+  const handleSignOut = useCallback(() => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to sign out?')) {
+        handleSignOutConfirmed();
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: handleSignOutConfirmed
+          }
+        ],
+        { cancelable: true }
+      );
+    }
+  }, []);
+
+  const handleReport = useCallback(() => {
+    setMenuVisible(false);
+    // Use setTimeout to ensure the menu is closed before navigation
+    setTimeout(() => {
+      router.push('/(tabs)/report');
+    }, 100);
+  }, [router]);
+
+  const getMenuItems = useCallback(() => {
+    const items = [];
+    
+    if (isAdmin) {
+      items.push({
+        icon: 'chart-bar',
+        title: 'Report',
+        onPress: handleReport
+      });
+    }
+    
+    items.push({
+      icon: 'logout',
+      title: 'Sign Out',
+      onPress: handleSignOut
+    });
+    
+    return items;
+  }, [isAdmin, handleReport, handleSignOut]);
 
   return (
     <PaperProvider>
@@ -54,27 +121,11 @@ export default function TabsLayout() {
           headerTitleStyle: styles.headerTitle,
           headerRight: () => (
             <View style={styles.menuContainer}>
-              <Menu
+              <CustomMenu
                 visible={menuVisible}
-                onDismiss={closeMenu}
-                anchor={
-                  <IconButton
-                    icon="menu"
-                    size={24}
-                    onPress={openMenu}
-                    style={styles.menuButton}
-                    color="#2e7d50"
-                  />
-                }
-                contentStyle={styles.menuContent}
-              >
-                <Menu.Item 
-                  onPress={handleSignOut}
-                  title="Sign Out"
-                  leadingIcon="logout"
-                  titleStyle={styles.menuItemText}
-                />
-              </Menu>
+                onDismiss={setMenuVisible}
+                menuItems={getMenuItems()}
+              />
             </View>
           ),
         }}
@@ -95,6 +146,12 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <Ionicons name="wallet-outline" size={24} color={color} />
             ),
+          }} 
+        />
+        <Tabs.Screen 
+          name="report" 
+          options={{ 
+            href: null,
           }} 
         />
       </Tabs>
@@ -130,24 +187,5 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     marginRight: 8,
-  },
-  menuButton: {
-    margin: 0,
-  },
-  menuContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    marginTop: 40,
-    minWidth: 150,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  menuItemText: {
-    color: '#2e7d50',
-    fontSize: 16,
-    fontWeight: '500',
   },
 });

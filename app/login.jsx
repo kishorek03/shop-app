@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { decode as atob } from 'base-64';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -16,6 +17,18 @@ import {
 } from 'react-native';
 
 const API_BASE_URL = 'http://localhost:8080/api';
+
+const decodeJWT = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = atob(base64);
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Error decoding JWT:', error);
+    return null;
+  }
+};
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -44,13 +57,29 @@ export default function LoginScreen() {
       const json = await response.json();
 
       if (response.ok && json.status === 'success') {
-        await AsyncStorage.setItem('accessToken', json.data.accessToken);
-        await AsyncStorage.setItem('refreshToken', json.data.refreshToken);
-        await AsyncStorage.setItem('userData', JSON.stringify({
-          name: json.data.name,
-          role: json.data.role
-        }));
-        router.replace('/(tabs)/sales');
+        console.log('Login Response:', json.data);
+        
+        // Decode the JWT token
+        const decodedToken = decodeJWT(json.data.accessToken);
+        console.log('Decoded token:', decodedToken);
+        
+        if (decodedToken) {
+          const userData = {
+            name: decodedToken.sub,
+            roles: decodedToken.roles,
+            userId: username
+          };
+          
+          console.log('Storing user data:', userData);
+          
+          await AsyncStorage.setItem('accessToken', json.data.accessToken);
+          await AsyncStorage.setItem('refreshToken', json.data.refreshToken);
+          await AsyncStorage.setItem('userData', JSON.stringify(userData));
+          
+          router.replace('/(tabs)/sales');
+        } else {
+          alert('Invalid token received');
+        }
       } else {
         alert(json.message || 'Login failed');
       }

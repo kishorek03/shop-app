@@ -18,6 +18,14 @@ import {
 const API_BASE_URL = 'http://localhost:8080/api';
 
 export default function SalesScreen() {
+  
+  const [paymentMode, setPaymentMode] = useState('cash');
+  const [products, setProducts] = useState([]);
+  const [flavours, setFlavours] = useState([]);
+  const [addOns, setAddOns] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [scaleAnim] = useState(new Animated.Value(0.95));
   const [sales, setSales] = useState([{ 
     productId: '', 
     quantity: '', 
@@ -27,13 +35,6 @@ export default function SalesScreen() {
     addOnId: '',
     isCustomPrice: false
   }]);
-  const [paymentMode, setPaymentMode] = useState('cash');
-  const [products, setProducts] = useState([]);
-  const [flavours, setFlavours] = useState([]);
-  const [addOns, setAddOns] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [scaleAnim] = useState(new Animated.Value(0.95));
 
   useEffect(() => {
     Animated.parallel([
@@ -169,7 +170,7 @@ export default function SalesScreen() {
     return totalAmount.toFixed(2);
   };
 
-  const updateSale = (index, field, value) => {
+  const updateSale = async (index, field, value) => {
     const updated = [...sales];
     updated[index][field] = value;
     
@@ -178,10 +179,44 @@ export default function SalesScreen() {
       updated[index].addOnId = '';
     }
     
-    if (updated[index].productId && !updated[index].isCustomPrice) {
-      const product = products.find(p => p.id === parseInt(updated[index].productId));
-      if (product) {
-        updated[index].salePrice = calculateAmount(updated[index], product);
+    // Only calculate if we have both product and quantity and it's not custom price
+    if (!updated[index].isCustomPrice && 
+        updated[index].productId && 
+        updated[index].quantity && 
+        ['productId', 'quantity', 'isParcel', 'flavourId', 'addOnId'].includes(field)) {
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        if (!token) {
+          Alert.alert('Error', 'Please login first');
+          return;
+        }
+
+        const saleDTO = {
+          productId: parseInt(updated[index].productId),
+          quantity: parseInt(updated[index].quantity),
+          parcel: updated[index].isParcel,
+          flavourId: updated[index].flavourId ? parseInt(updated[index].flavourId) : null,
+          addOnId: updated[index].addOnId ? parseInt(updated[index].addOnId) : null
+        };
+
+        const response = await fetch(`${API_BASE_URL}/sales/calculateAmount`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(saleDTO),
+        });
+
+        const json = await response.json();
+        
+        if (response.ok && json.status === 'success') {
+          updated[index].salePrice = json.data.toString();
+        } else {
+          console.error('Failed to calculate amount:', json.message);
+        }
+      } catch (error) {
+        console.error('Error calculating amount:', error);
       }
     }
     
@@ -370,18 +405,24 @@ export default function SalesScreen() {
               </>
             )}
 
-            <TextInput
-              style={styles.input}
-              placeholder="Quantity"
-              placeholderTextColor="#888"
-              keyboardType="numeric"
-              value={sale.quantity}
-              onChangeText={(value) => updateSale(index, 'quantity', value)}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Quantity</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter quantity"
+                placeholderTextColor="#888"
+                keyboardType="numeric"
+                value={sale.quantity}
+                onChangeText={(value) => updateSale(index, 'quantity', value)}
+              />
+            </View>
 
             <View style={styles.parcelContainer}>
               <Text style={styles.checkboxLabel}>Parcel</Text>
-              <TouchableOpacity onPress={() => updateSale(index, 'isParcel', !sale.isParcel)}>
+              <TouchableOpacity 
+                onPress={() => updateSale(index, 'isParcel', !sale.isParcel)}
+                style={styles.checkboxContainer}
+              >
                 <Ionicons
                   name={sale.isParcel ? 'checkbox-outline' : 'square-outline'}
                   size={24}
@@ -392,7 +433,10 @@ export default function SalesScreen() {
 
             <View style={styles.parcelContainer}>
               <Text style={styles.checkboxLabel}>Custom Price</Text>
-              <TouchableOpacity onPress={() => updateSale(index, 'isCustomPrice', !sale.isCustomPrice)}>
+              <TouchableOpacity 
+                onPress={() => updateSale(index, 'isCustomPrice', !sale.isCustomPrice)}
+                style={styles.checkboxContainer}
+              >
                 <Ionicons
                   name={sale.isCustomPrice ? 'checkbox-outline' : 'square-outline'}
                   size={24}
@@ -401,18 +445,21 @@ export default function SalesScreen() {
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={[
-                styles.input,
-                sale.isCustomPrice && styles.priceInput
-              ]}
-              placeholder="Sale Price"
-              placeholderTextColor="#888"
-              keyboardType="numeric"
-              editable={sale.isCustomPrice}
-              value={sale.salePrice}
-              onChangeText={(value) => updateSale(index, 'salePrice', value)}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Sale Price</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  sale.isCustomPrice && styles.priceInput
+                ]}
+                placeholder="Enter price"
+                placeholderTextColor="#888"
+                keyboardType="numeric"
+                editable={sale.isCustomPrice}
+                value={sale.salePrice}
+                onChangeText={(value) => updateSale(index, 'salePrice', value)}
+              />
+            </View>
           </Animated.View>
         ))}
 
@@ -448,10 +495,10 @@ export default function SalesScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <>
+              <View style={styles.submitButtonInner}>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
                 <Text style={styles.submitButtonText}>Submit Order</Text>
-              </>
+              </View>
             )}
           </View>
         </TouchableOpacity>
@@ -616,5 +663,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 17,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  submitButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxContainer: {
+    padding: 4,
   },
 });
