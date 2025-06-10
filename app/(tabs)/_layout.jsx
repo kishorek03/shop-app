@@ -138,7 +138,7 @@ export default function TabsLayout() {
               <Ionicons name="cash-outline" size={24} color={color} />
             ),
           }} 
-        />
+        /> 
         <Tabs.Screen 
           name="expense" 
           options={{ 
@@ -151,6 +151,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="report" 
           options={{ 
+            title: 'Report',
             href: null,
           }} 
         />

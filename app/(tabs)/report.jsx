@@ -10,6 +10,8 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -43,6 +45,12 @@ export default function ReportScreen() {
   const [flavours, setFlavours] = useState([]);
   const [addOns, setAddOns] = useState([]);
 
+  // Add state for available flavors based on selected product
+  const [availableFlavours, setAvailableFlavours] = useState([]);
+
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [selectedDateType, setSelectedDateType] = useState('start'); // 'start' or 'end'
+
   useEffect(() => {
     checkAccess();
   }, []);
@@ -50,6 +58,22 @@ export default function ReportScreen() {
   useEffect(() => {
     fetchReportData();
   }, [filterPeriod, selectedProductId, selectedFlavourId, selectedParcel, startDate, endDate]);
+
+  // Update available flavors when product changes
+  useEffect(() => {
+    if (selectedProductId === 'all') {
+      setAvailableFlavours(flavours);
+      setSelectedFlavourId('all');
+    } else {
+      const selectedProduct = products.find(p => p.id.toString() === selectedProductId);
+      if (selectedProduct && selectedProduct.flavours) {
+        setAvailableFlavours(selectedProduct.flavours);
+      } else {
+        setAvailableFlavours([]);
+      }
+      setSelectedFlavourId('all');
+    }
+  }, [selectedProductId, products, flavours]);
 
   // Fetch master data
   const fetchMasterData = async (token) => {
@@ -72,7 +96,18 @@ export default function ReportScreen() {
         addOnsRes.json(),
       ]);
 
-      if (productsData.status === 'success') setProducts(productsData.data);
+      console.log('Products Response:', productsData);
+      console.log('Raw Products Data:', productsData.data);
+      
+      if (productsData.status === 'success') {
+        // Check if the data is in the expected format
+        const validProducts = productsData.data.filter(p => {
+          console.log('Checking product:', p);
+          return p && (p.id);
+        });
+        console.log('Valid Products:', validProducts);
+        setProducts(validProducts);
+      }
       if (flavoursData.status === 'success') setFlavours(flavoursData.data);
       if (addOnsData.status === 'success') setAddOns(addOnsData.data);
 
@@ -132,6 +167,18 @@ export default function ReportScreen() {
     });
   };
 
+  const handleDateSelection = (date) => {
+    if (selectedDateType === 'start') {
+      setStartDate(date);
+      if (!endDate || date > endDate) {
+        setEndDate(date);
+      }
+    } else {
+      setEndDate(date);
+    }
+    setShowDatePickerModal(false);
+  };
+
   const fetchReportData = async () => {
     try {
       setLoading(true);
@@ -156,25 +203,32 @@ export default function ReportScreen() {
         switch (filterPeriod) {
           case 'today':
             startDate = new Date(now.setHours(0, 0, 0, 0));
+            queryParams.append('startDate', startDate.toISOString());
+            queryParams.append('endDate', new Date().toISOString());
             break;
           case 'week':
             startDate = new Date(now.setDate(now.getDate() - 7));
+            queryParams.append('startDate', startDate.toISOString());
+            queryParams.append('endDate', new Date().toISOString());
             break;
           case 'month':
-            startDate = new Date(now.setDate(1));
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            queryParams.append('startDate', startDate.toISOString());
+            queryParams.append('endDate', new Date().toISOString());
             break;
           case 'year':
-            startDate = new Date(now.setMonth(0, 1));
+            startDate = new Date(now.getFullYear(), 0, 1);
+            queryParams.append('startDate', startDate.toISOString());
+            queryParams.append('endDate', new Date().toISOString());
             break;
         }
-        
-        if (startDate) {
-          queryParams.append('startDate', startDate.toISOString());
-          queryParams.append('endDate', new Date().toISOString());
-        }
       } else if (filterPeriod === 'custom' && startDate && endDate) {
+        // Set end date to end of day
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        
         queryParams.append('startDate', startDate.toISOString());
-        queryParams.append('endDate', endDate.toISOString());
+        queryParams.append('endDate', endOfDay.toISOString());
       }
 
       // Add other filters
@@ -182,7 +236,11 @@ export default function ReportScreen() {
         queryParams.append('productId', selectedProductId);
       }
       if (selectedFlavourId !== 'all') {
-        queryParams.append('flavourId', selectedFlavourId);
+        if (selectedFlavourId === 'none') {
+          queryParams.append('noFlavour', 'true');
+        } else {
+          queryParams.append('flavourId', selectedFlavourId);
+        }
       }
       if (selectedParcel !== 'all') {
         queryParams.append('parcel', selectedParcel === 'yes');
@@ -231,6 +289,10 @@ export default function ReportScreen() {
     const count = safeReportData.length;
     const productSales = {};
     const parcelCount = safeReportData.filter(item => Boolean(item?.parcel)).length;
+    const noFlavourCount = safeReportData.filter(item => !item?.flavourId).length;
+    const noFlavourTotal = safeReportData
+      .filter(item => !item?.flavourId)
+      .reduce((sum, item) => sum + (typeof item?.amount === 'number' ? item.amount : 0), 0);
 
     safeReportData.forEach(item => {
       if (item && typeof item.productId !== 'undefined' && item.productId !== null) {
@@ -258,6 +320,8 @@ export default function ReportScreen() {
       totalSales: total.toFixed(2),
       orderCount: count,
       parcelCount,
+      noFlavourCount,
+      noFlavourTotal: noFlavourTotal.toFixed(2),
       topProduct: topProduct 
         ? {
             name: topProduct.name || 'NA',
@@ -267,6 +331,115 @@ export default function ReportScreen() {
     };
   }, [reportData, products]);
 
+  const renderDatePickerModal = () => (
+    <Modal
+      visible={showDatePickerModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowDatePickerModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.datePickerModal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Date Range</Text>
+            <TouchableOpacity onPress={() => setShowDatePickerModal(false)}>
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.datePickerContent}>
+            <View style={styles.datePickerRow}>
+              <Text style={styles.datePickerLabel}>Start Date</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="date"
+                  value={startDate ? startDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => {
+                    const date = new Date(e.target.value);
+                    setStartDate(date);
+                    if (!endDate || date > endDate) {
+                      setEndDate(date);
+                    }
+                  }}
+                  style={styles.webDateInput}
+                />
+              ) : (
+                <TouchableOpacity 
+                  style={styles.datePickerButton}
+                  onPress={() => {
+                    setSelectedDateType('start');
+                    setShowDatePickerModal(false);
+                    setTimeout(() => {
+                      setShowStartDatePicker(true);
+                    }, 100);
+                  }}
+                >
+                  <Text style={styles.datePickerButtonText}>
+                    {formatDateForDisplay(startDate)}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.datePickerRow}>
+              <Text style={styles.datePickerLabel}>End Date</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="date"
+                  value={endDate ? endDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => {
+                    const date = new Date(e.target.value);
+                    setEndDate(date);
+                  }}
+                  style={styles.webDateInput}
+                />
+              ) : (
+                <TouchableOpacity 
+                  style={styles.datePickerButton}
+                  onPress={() => {
+                    setSelectedDateType('end');
+                    setShowDatePickerModal(false);
+                    setTimeout(() => {
+                      setShowEndDatePicker(true);
+                    }, 100);
+                  }}
+                >
+                  <Text style={styles.datePickerButtonText}>
+                    {formatDateForDisplay(endDate)}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.modalButtonCancel]}
+              onPress={() => {
+                setStartDate(null);
+                setEndDate(null);
+                setShowDatePickerModal(false);
+              }}
+            >
+              <Text style={styles.modalButtonText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.modalButtonApply]}
+              onPress={() => {
+                if (startDate && endDate) {
+                  fetchReportData();
+                }
+                setShowDatePickerModal(false);
+              }}
+            >
+              <Text style={[styles.modalButtonText, styles.modalButtonTextApply]}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const FilterButton = ({ title, value, current, onPress }) => (
     <TouchableOpacity 
       style={[
@@ -274,10 +447,13 @@ export default function ReportScreen() {
         filterPeriod === value && styles.filterButtonActive
       ]}
       onPress={() => {
-        onPress(value);
-        if (value !== 'custom') {
+        if (value === 'custom') {
+          setShowDatePickerModal(true);
+        } else {
+          onPress(value);
           setStartDate(null);
           setEndDate(null);
+          fetchReportData();
         }
       }}
     >
@@ -307,15 +483,13 @@ export default function ReportScreen() {
     return (
       <Animated.View style={[styles.tableRow, { opacity: fadeAnim }]}>
         <View style={[styles.cell, { flex: 2 }]}>
-          <Text style={styles.productName}>{product?.name || 'NA'}</Text>
-          {(flavour || addOn) && (
-            <Text style={styles.categoryName}>
-              {[
-                flavour?.name,
-                addOn?.name
-              ].filter(Boolean).join(' + ')}
-            </Text>
-          )}
+          <Text style={styles.productName}>
+            {product?.name || `Product : ${item?.productId || 'NA'}`}
+          </Text>
+          <Text style={styles.categoryName}>
+            {flavour ? flavour.name : 'No Flavour'}
+            {addOn ? ` + ${addOn.name}` : ''}
+          </Text>
           <Text style={styles.salePrice}>
             ₹{(typeof item?.salePrice === 'number' ? item.salePrice : 0).toFixed(2)} each
           </Text>
@@ -329,48 +503,6 @@ export default function ReportScreen() {
     );
   };
 
-  const renderDateRangePicker = () => (
-    <View style={styles.dateRangeContainer}>
-      <TouchableOpacity 
-        style={styles.dateInput}
-        onPress={() => setShowStartDatePicker(true)}
-      >
-        <Text style={styles.dateInputText}>{formatDateForDisplay(startDate)}</Text>
-      </TouchableOpacity>
-      <Text style={styles.dateRangeSeparator}>to</Text>
-      <TouchableOpacity 
-        style={styles.dateInput}
-        onPress={() => setShowEndDatePicker(true)}
-      >
-        <Text style={styles.dateInputText}>{formatDateForDisplay(endDate)}</Text>
-      </TouchableOpacity>
-
-      {(showStartDatePicker || showEndDatePicker) && (
-        <DateTimePicker
-          value={showStartDatePicker ? (startDate || new Date()) : (endDate || new Date())}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            if (showStartDatePicker) {
-              setShowStartDatePicker(false);
-              if (selectedDate) {
-                setStartDate(selectedDate);
-                if (!endDate || selectedDate > endDate) {
-                  setEndDate(selectedDate);
-                }
-              }
-            } else if (showEndDatePicker) {
-              setShowEndDatePicker(false);
-              if (selectedDate) {
-                setEndDate(selectedDate);
-              }
-            }
-          }}
-        />
-      )}
-    </View>
-  );
-
   const renderFilters = () => (
     <View style={styles.advancedFilters}>
       <View style={styles.filterRow}>
@@ -381,16 +513,15 @@ export default function ReportScreen() {
               selectedValue={selectedProductId}
               onValueChange={setSelectedProductId}
               style={styles.picker}
+              dropdownIconColor="#4CAF50"
             >
               <Picker.Item label="All Products" value="all" />
               {Array.isArray(products) && products.map(product => (
-                product && product.id ? (
-                  <Picker.Item 
-                    key={`product-${product.id}`}
-                    label={product.name || 'NA'} 
-                    value={product.id.toString()}
-                  />
-                ) : null
+                <Picker.Item 
+                  key={`product-${product.id}`}
+                  label={`${product.name} (₹${product.unitPrice})`}
+                  value={product.id.toString()}
+                />
               ))}
             </Picker>
           </View>
@@ -403,16 +534,17 @@ export default function ReportScreen() {
               selectedValue={selectedFlavourId}
               onValueChange={setSelectedFlavourId}
               style={styles.picker}
+              dropdownIconColor="#4CAF50"
+              enabled={selectedProductId !== 'all'}
             >
               <Picker.Item label="All Flavours" value="all" />
-              {Array.isArray(flavours) && flavours.map(flavour => (
-                flavour && flavour.id ? (
-                  <Picker.Item 
-                    key={`flavour-${flavour.id}`}
-                    label={flavour.name || 'NA'} 
-                    value={flavour.id.toString()}
-                  />
-                ) : null
+              <Picker.Item label="No Flavour" value="none" />
+              {Array.isArray(availableFlavours) && availableFlavours.map(flavour => (
+                <Picker.Item 
+                  key={`flavour-${flavour.id}`}
+                  label={`${flavour.name} (+₹${flavour.price})`}
+                  value={flavour.id.toString()}
+                />
               ))}
             </Picker>
           </View>
@@ -427,16 +559,15 @@ export default function ReportScreen() {
               selectedValue={selectedAddOnId}
               onValueChange={setSelectedAddOnId}
               style={styles.picker}
+              dropdownIconColor="#4CAF50"
             >
               <Picker.Item label="All Add-Ons" value="all" />
               {Array.isArray(addOns) && addOns.map(addon => (
-                addon && addon.id ? (
-                  <Picker.Item 
-                    key={`addon-${addon.id}`}
-                    label={addon.name || 'NA'} 
-                    value={addon.id.toString()}
-                  />
-                ) : null
+                <Picker.Item 
+                  key={`addon-${addon.id}`}
+                  label={`${addon.name} (+₹${addon.price})`}
+                  value={addon.id.toString()}
+                />
               ))}
             </Picker>
           </View>
@@ -449,6 +580,7 @@ export default function ReportScreen() {
               selectedValue={selectedParcel}
               onValueChange={setSelectedParcel}
               style={styles.picker}
+              dropdownIconColor="#4CAF50"
             >
               <Picker.Item label="All Orders" value="all" />
               <Picker.Item label="Parcel Only" value="yes" />
@@ -458,7 +590,7 @@ export default function ReportScreen() {
         </View>
       </View>
 
-      {filterPeriod === 'custom' && renderDateRangePicker()}
+      {filterPeriod === 'custom' && renderDatePickerModal()}
     </View>
   );
 
@@ -480,14 +612,6 @@ export default function ReportScreen() {
             <Text style={styles.insightLabel}>Total Sales</Text>
             <Text style={styles.insightValue}>₹{insights.totalSales}</Text>
           </View>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Orders</Text>
-            <Text style={styles.insightValue}>{insights.orderCount}</Text>
-          </View>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Parcel Orders</Text>
-            <Text style={styles.insightValue}>{insights.parcelCount}</Text>
-          </View>
         </ScrollView>
 
         {/* Time Filters */}
@@ -504,6 +628,41 @@ export default function ReportScreen() {
         {/* Advanced Filters */}
         {renderFilters()}
 
+        {/* Date Pickers - Only show on native platforms */}
+        {Platform.OS !== 'web' && (
+          <>
+            {showStartDatePicker && (
+              <DateTimePicker
+                value={startDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowStartDatePicker(false);
+                  if (selectedDate) {
+                    handleDateSelection(selectedDate);
+                  }
+                }}
+              />
+            )}
+            {showEndDatePicker && (
+              <DateTimePicker
+                value={endDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowEndDatePicker(false);
+                  if (selectedDate) {
+                    handleDateSelection(selectedDate);
+                  }
+                }}
+              />
+            )}
+          </>
+        )}
+
+        {/* Date Picker Modal */}
+        {renderDatePickerModal()}
+
         {/* Table Section */}
         <View style={styles.tableContainer}>
           {renderHeader()}
@@ -513,7 +672,7 @@ export default function ReportScreen() {
               keyExtractor={(item, index) => `${item.id || index}`}
               renderItem={renderItem}
               contentContainerStyle={styles.listContainer}
-              scrollEnabled={false} // Disable scrolling since we're in a ScrollView
+              scrollEnabled={false}
             />
           ) : (
             <View style={styles.emptyContainer}>
@@ -720,25 +879,96 @@ const styles = StyleSheet.create({
     height: 40,
     color: '#333',
   },
-  dateRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  dateInput: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerModal: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxWidth: 400,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  datePickerContent: {
+    marginBottom: 20,
+  },
+  datePickerRow: {
+    marginBottom: 15,
+  },
+  datePickerLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  datePickerButton: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     backgroundColor: '#f9f9f9',
   },
-  dateInputText: {
+  datePickerButtonText: {
     color: '#333',
+    fontSize: 16,
   },
-  dateRangeSeparator: {
-    marginHorizontal: 10,
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  modalButtonApply: {
+    backgroundColor: '#4CAF50',
+  },
+  modalButtonText: {
+    fontSize: 16,
     color: '#666',
+  },
+  modalButtonTextApply: {
+    color: '#fff',
+  },
+  webDateInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    width: '100%',
+    fontSize: 16,
+    color: '#333',
   },
 });

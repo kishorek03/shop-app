@@ -90,10 +90,7 @@ export default function SalesScreen() {
       ]);
 
       if (productsRes.ok && productsJson.status === 'success') {
-        setProducts(productsJson.data.filter(p => p && p.unitId).map(p => ({
-          ...p,
-          id: p.unitId
-        })));
+        setProducts(productsJson.data.filter(p => p && p.id));
       }
 
       if (flavoursRes.ok && flavoursJson.status === 'success') {
@@ -296,6 +293,23 @@ export default function SalesScreen() {
     }
   };
 
+  const getAvailableFlavours = (productId) => {
+    if (!productId) return [];
+    const selectedProduct = products.find(p => p.id.toString() === productId);
+    if (!selectedProduct || !selectedProduct.flavourIds) return [];
+    
+    // Filter flavours based on the product's flavourIds
+    return flavours.filter(flavour => 
+      selectedProduct.flavourIds.includes(flavour.id)
+    );
+  };
+
+  // Add logging to debug the data
+  useEffect(() => {
+    console.log('Products:', products);
+    console.log('Flavours:', flavours);
+  }, [products, flavours]);
+
   if (loading && (products.length === 0 || flavours.length === 0 || addOns.length === 0)) {
     return (
       <View style={styles.loadingContainer}>
@@ -374,7 +388,7 @@ export default function SalesScreen() {
                     dropdownIconColor="#4CAF50"
                   >
                     <Picker.Item label="Select Flavour" value="" />
-                    {flavours.map((flavour) => (
+                    {getAvailableFlavours(sale.productId).map((flavour) => (
                       <Picker.Item 
                         key={`flavour-${flavour.id}`}
                         label={`${flavour.name} (+₹${flavour.price})`}
