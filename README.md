@@ -1,13 +1,12 @@
-# Shop App 🛍️
+# Transaction Management App 💰
 
 <div align="center">
 
 ![React Native](https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Expo](https://img.shields.io/badge/Expo-1B1F23?style=for-the-badge&logo=expo&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
 
-A modern, feature-rich mobile shopping application built with React Native and Expo. This app provides a seamless shopping experience with a beautiful UI and smooth performance.
+A robust transaction management application built with React Native and Expo. This app provides a seamless experience for managing and tracking transactions with a responsive UI and powerful backend integration.
 
 [Features](#-features) • [Tech Stack](#️-tech-stack) • [Getting Started](#-getting-started) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
@@ -21,40 +20,31 @@ A modern, feature-rich mobile shopping application built with React Native and E
 
 ## 🚀 Features
 
-- ✨ Modern and intuitive user interface with smooth animations
-- 🔄 Seamless navigation and transitions
-- 🔍 Advanced product browsing and searching capabilities
-- 🛒 Full-featured shopping cart functionality
-- 🔐 Secure user authentication and authorization
-- 📱 Responsive design for various screen sizes
-- 📶 Offline support with data persistence
-- 🔔 Push notifications for order updates
-- 💳 Secure payment integration
-- 🌙 Dark mode support
-- 🔍 Product filtering and sorting
-- 📊 Order tracking and history
-- ⭐ Product reviews and ratings
+- ✨ Clean and responsive user interface
+- 📊 Transaction tracking and management
+- 🔄 Real-time data synchronization
 - 📱 Cross-platform compatibility (iOS, Android, Web)
+- 🔐 Secure user authentication
+- 📈 Transaction analytics and reporting
+- 🔍 Advanced search and filtering
+- 📱 Responsive design for all screen sizes
+- 📊 Data visualization and charts
+
 
 ## 🛠️ Tech Stack
 
-### Core Technologies
+### Frontend
 - **Framework:** [React Native](https://reactnative.dev/) (v0.79.2)
 - **Development Platform:** [Expo](https://expo.dev/) (v53.0.9)
 - **Language:** [TypeScript](https://www.typescriptlang.org/) (v5.8.3)
-
-### Navigation & Routing
-- **Navigation:** [React Navigation](https://reactnavigation.org/) (v7.1.6)
-- **Routing:** [Expo Router](https://docs.expo.dev/router/introduction/) (v5.0.7)
-
-### UI/UX
 - **UI Components:** 
   - [React Native Paper](https://callstack.github.io/react-native-paper/) (v5.11.7)
   - [@react-native-material/core](https://github.com/ecklf/react-native-material) (v1.3.7)
-- **Icons:** [Expo Vector Icons](https://icons.expo.fyi/) (v14.1.0)
-- **Animations:** [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/) (v3.17.4)
 
-### State Management & Storage
+### Backend Integration
+- **API Integration:** RESTful API
+- **Data Storage:** Backend Database
+- **Authentication:** JWT-based authentication
 - **State Management:** React Context API
 - **Local Storage:** [AsyncStorage](https://react-native-async-storage.github.io/async-storage/) (v2.1.2)
 
@@ -130,7 +120,7 @@ shop-app/
 │   └── layouts/          # Layout components
 ├── constants/             # App-wide constants and configurations
 ├── hooks/                 # Custom React hooks
-├── services/             # API and third-party service integrations
+├── services/             # API and backend service integrations
 ├── store/                # State management
 ├── styles/               # Global styles and themes
 ├── types/                # TypeScript type definitions
@@ -145,13 +135,13 @@ The app follows a modular architecture pattern with the following key aspects:
 - **Component-Based Structure**: Reusable components for maintainability
 - **Type Safety**: Full TypeScript implementation
 - **State Management**: Context API for global state
-- **Navigation**: File-based routing with Expo Router
+- **Backend Integration**: RESTful API communication
 
 ### Key Features Implementation
-- **Authentication**: JWT-based authentication with secure storage
-- **Shopping Cart**: Persistent cart management with AsyncStorage
-- **Product Search**: Implemented with debounced search and filters
-- **Payment Integration**: Secure payment processing with error handling
+- **Transaction Management**: Secure and efficient transaction handling
+- **Data Persistence**: Local storage with backend synchronization
+- **User Authentication**: Secure login and session management
+- **Data Visualization**: Interactive charts and reports
 
 ### Best Practices
 - **Code Organization**: Modular and maintainable code structure
