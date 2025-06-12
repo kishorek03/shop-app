@@ -1,24 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
+import { useLanguage } from '../../context/LanguageContext';
+import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 
 const API_BASE_URL = 'http://localhost:8080/api';
+const { width } = Dimensions.get('window');
 
 export default function SalesScreen() {
-  
+  const { t } = useLanguage();
   const [paymentMode, setPaymentMode] = useState('cash');
   const [products, setProducts] = useState([]);
   const [flavours, setFlavours] = useState([]);
@@ -26,6 +31,7 @@ export default function SalesScreen() {
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.95));
+  const [lastOrder, setLastOrder] = useState(null);
   const [sales, setSales] = useState([{ 
     productId: '', 
     quantity: '', 
@@ -35,6 +41,13 @@ export default function SalesScreen() {
     addOnId: '',
     isCustomPrice: false
   }]);
+  const router = useRouter();
+  const [dailySummary, setDailySummary] = useState({
+    totalOrders: 0,
+    totalAmount: 0,
+    cashAmount: 0,
+    upiAmount: 0
+  });
 
   useEffect(() => {
     Animated.parallel([
@@ -56,50 +69,16 @@ export default function SalesScreen() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        Alert.alert('Error', 'Please login first');
+      const { products: fetchedProducts, flavours: fetchedFlavours, addOns: fetchedAddOns, error } = await fetchMasterData();
+      
+      if (error) {
+        Alert.alert('Error', 'Failed to load data. Please check your connection.');
         return;
       }
 
-      const [productsRes, flavoursRes, addOnsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/products`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-        fetch(`${API_BASE_URL}/flavours`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-        fetch(`${API_BASE_URL}/addons`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-      ]);
-
-      const [productsJson, flavoursJson, addOnsJson] = await Promise.all([
-        productsRes.json(),
-        flavoursRes.json(),
-        addOnsRes.json()
-      ]);
-
-      if (productsRes.ok && productsJson.status === 'success') {
-        setProducts(productsJson.data.filter(p => p && p.id));
-      }
-
-      if (flavoursRes.ok && flavoursJson.status === 'success') {
-        setFlavours(flavoursJson.data.filter(f => f && f.id));
-      }
-
-      if (addOnsRes.ok && addOnsJson.status === 'success') {
-        setAddOns(addOnsJson.data.filter(a => a && a.id));
-      }
+      setProducts(fetchedProducts);
+      setFlavours(fetchedFlavours);
+      setAddOns(fetchedAddOns);
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -209,6 +188,7 @@ export default function SalesScreen() {
         
         if (response.ok && json.status === 'success') {
           updated[index].salePrice = json.data.toString();
+          updated[index].amount = json.data; // Store the calculated amount
         } else {
           console.error('Failed to calculate amount:', json.message);
         }
@@ -241,23 +221,35 @@ export default function SalesScreen() {
       const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
         Alert.alert('Error', 'Please login first');
+        router.replace('/');
         return;
       }
 
+      // Normalize payment method
+      const normalizedPaymentMode = paymentMode.trim().toUpperCase();
+      const paymentMethodId = normalizedPaymentMode === 'CASH' ? 1 : 2;
+
       const orderData = {
-        paymentMethodId: paymentMode === 'cash' ? 1 : 2,
+        paymentMethodId: paymentMethodId,
         totalAmount: parseFloat(calculateTotal()),
-        sales: sales.map(sale => ({
-          productId: parseInt(sale.productId),
-          flavourId: sale.flavourId ? parseInt(sale.flavourId) : null,
-          addOnId: sale.addOnId ? parseInt(sale.addOnId) : null,
-          quantity: parseInt(sale.quantity),
-          amount: parseFloat(sale.salePrice),
-          salePrice: parseFloat(sale.salePrice) / parseInt(sale.quantity),
-          parcel: sale.isParcel,
-          orderId: null
-        }))
+        sales: sales.map(sale => {
+          const quantity = parseInt(sale.quantity);
+          const price = sale.isCustomPrice ? parseFloat(sale.salePrice) : parseFloat(sale.amount);
+          
+          return {
+            productId: parseInt(sale.productId),
+            flavourId: sale.flavourId ? parseInt(sale.flavourId) : null,
+            addOnId: sale.addOnId ? parseInt(sale.addOnId) : null,
+            quantity: quantity,
+            amount: parseFloat(sale.amount),
+            salePrice: price,
+            parcel: sale.isParcel,
+            orderId: null
+          };
+        })
       };
+
+      console.log('Submitting order with data:', orderData); // Debug log
 
       const response = await fetch(`${API_BASE_URL}/orders`, {
         method: 'POST',
@@ -271,6 +263,13 @@ export default function SalesScreen() {
       const json = await response.json();
       
       if (response.status === 201 && json.status === 'success') {
+        // Store last order details with normalized payment method
+        setLastOrder({
+          totalAmount: orderData.totalAmount,
+          paymentMode: normalizedPaymentMode,
+          timestamp: new Date().toISOString()
+        });
+        
         Alert.alert('Success', json.message || 'Order submitted successfully');
         setSales([{ 
           productId: '', 
@@ -282,6 +281,9 @@ export default function SalesScreen() {
           isCustomPrice: false
         }]);
         setPaymentMode('cash');
+        
+        // Refresh daily summary after successful order
+        fetchDailySummary();
       } else {
         Alert.alert('Error', json.message || 'Failed to submit order');
       }
@@ -293,15 +295,8 @@ export default function SalesScreen() {
     }
   };
 
-  const getAvailableFlavours = (productId) => {
-    if (!productId) return [];
-    const selectedProduct = products.find(p => p.id.toString() === productId);
-    if (!selectedProduct || !selectedProduct.flavourIds) return [];
-    
-    // Filter flavours based on the product's flavourIds
-    return flavours.filter(flavour => 
-      selectedProduct.flavourIds.includes(flavour.id)
-    );
+  const getAvailableFlavoursForProduct = (productId) => {
+    return getAvailableFlavours(productId, products, flavours);
   };
 
   // Add logging to debug the data
@@ -309,6 +304,76 @@ export default function SalesScreen() {
     console.log('Products:', products);
     console.log('Flavours:', flavours);
   }, [products, flavours]);
+
+  const fetchDailySummary = async () => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        return;
+      }
+
+      // Get today's date range
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      
+      // Convert to UTC while preserving the local date
+      const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000);
+      const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
+
+      const response = await fetch(
+        `${API_BASE_URL}/orders/summary?start=${startUTC.toISOString()}&end=${endUTC.toISOString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && Array.isArray(data.data)) {
+          // Calculate totals
+          const summary = data.data.reduce((acc, order) => {
+            acc.totalOrders++;
+            acc.totalAmount += order.totalAmount;
+            
+            // Normalize payment method to handle case sensitivity and whitespace
+            const paymentMethod = (order.paymentMethod || '').trim().toUpperCase();
+            
+            if (paymentMethod === 'CASH') {
+              acc.cashAmount += order.totalAmount;
+            } else if (paymentMethod === 'UPI') {
+              acc.upiAmount += order.totalAmount;
+            } else {
+              // Handle any other payment methods or unknown cases
+              console.log('Unknown payment method:', order.paymentMethod);
+            }
+            return acc;
+          }, {
+            totalOrders: 0,
+            totalAmount: 0,
+            cashAmount: 0,
+            upiAmount: 0
+          });
+
+          // Log the summary for debugging
+          console.log('Daily Summary:', summary);
+          setDailySummary(summary);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching daily summary:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailySummary();
+    // Refresh summary every minute
+    const interval = setInterval(fetchDailySummary, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading && (products.length === 0 || flavours.length === 0 || addOns.length === 0)) {
     return (
@@ -324,7 +389,83 @@ export default function SalesScreen() {
       style={styles.container} 
       contentContainerStyle={styles.scrollContainer}
     >
-      <View>
+      {lastOrder && (
+        <Animated.View 
+          style={[
+            styles.lastOrderContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <View style={styles.lastOrderHeader}>
+            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            <Text style={styles.lastOrderTitle}>Last Order</Text>
+          </View>
+          <View style={styles.lastOrderDetails}>
+            <Text style={styles.lastOrderAmount}>₹{lastOrder.totalAmount.toFixed(2)}</Text>
+            <Text style={styles.lastOrderInfo}>
+              {lastOrder.paymentMode === 'cash' ? 'Cash' : 'UPI'} • {new Date(lastOrder.timestamp).toLocaleTimeString()}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
+      <View style={styles.mainContainer}>
+        <View style={styles.summaryContainer}>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryTitle}>Today's Summary</Text>
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={fetchDailySummary}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh" size={20} color="#4CAF50" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name="cart-outline" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryLabel}>Today's Orders</Text>
+                <Text style={styles.summaryValue}>{dailySummary.totalOrders}</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name="cash-outline" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryLabel}>Total Amount</Text>
+                <Text style={styles.summaryValue}>₹{dailySummary.totalAmount.toFixed(2)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryLabel}>Cash Sales</Text>
+                <Text style={styles.summaryValue}>₹{dailySummary.cashAmount.toFixed(2)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name="phone-portrait-outline" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryLabel}>UPI Sales</Text>
+                <Text style={styles.summaryValue}>₹{dailySummary.upiAmount.toFixed(2)}</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+
         {sales.map((sale, index) => (
           <Animated.View 
             key={index} 
@@ -377,7 +518,7 @@ export default function SalesScreen() {
               </Picker>
             </View>
 
-            {sale.productId && (
+            {sale.productId && getAvailableFlavoursForProduct(sale.productId).length > 0 && (
               <>
                 <Text style={styles.label}>Flavour</Text>
                 <View style={styles.pickerContainer}>
@@ -388,7 +529,7 @@ export default function SalesScreen() {
                     dropdownIconColor="#4CAF50"
                   >
                     <Picker.Item label="Select Flavour" value="" />
-                    {getAvailableFlavours(sale.productId).map((flavour) => (
+                    {getAvailableFlavoursForProduct(sale.productId).map((flavour) => (
                       <Picker.Item 
                         key={`flavour-${flavour.id}`}
                         label={`${flavour.name} (+₹${flavour.price})`}
@@ -397,7 +538,11 @@ export default function SalesScreen() {
                     ))}
                   </Picker>
                 </View>
+              </>
+            )}
 
+            {sale.productId && addOns && addOns.length > 0 && (
+              <>
                 <Text style={styles.label}>Add-On</Text>
                 <View style={styles.pickerContainer}>
                   <Picker
@@ -407,7 +552,7 @@ export default function SalesScreen() {
                     dropdownIconColor="#4CAF50"
                   >
                     <Picker.Item label="No Add-On" value="" />
-                    {addOns && addOns.length > 0 && addOns.map((addOn) => (
+                    {addOns.map((addOn) => (
                       <Picker.Item 
                         key={`addon-${addOn.id}`}
                         label={`${addOn.name} (+₹${addOn.price})`}
@@ -526,6 +671,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  mainContainer: {
+    flex: 1,
+  },
   scrollContainer: {
     padding: 20,
     paddingBottom: 40,
@@ -621,15 +769,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   summaryContainer: {
+    padding: 15,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  summaryCard: {
+    backgroundColor: '#f8f9fa',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 15,
+    marginRight: 12,
+    minWidth: width * 0.35,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e8f5e9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2e7d32',
   },
   totalContainer: {
     flexDirection: 'row',
@@ -688,5 +867,67 @@ const styles = StyleSheet.create({
   },
   checkboxContainer: {
     padding: 4,
+  },
+  lastOrderContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  lastOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  lastOrderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginLeft: 8,
+  },
+  lastOrderDetails: {
+    marginLeft: 32,
+  },
+  lastOrderAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  lastOrderInfo: {
+    fontSize: 14,
+    color: '#666',
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
 });

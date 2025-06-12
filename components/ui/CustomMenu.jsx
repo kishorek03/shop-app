@@ -7,7 +7,7 @@ export function CustomMenu({ visible, onDismiss, menuItems }) {
     <IconButton
       icon="menu"
       size={24}
-      onPress={() => onDismiss(true)}
+      onPress={() => onDismiss(!visible)}
       style={styles.menuButton}
       color="#2e7d50"
     />
@@ -41,18 +41,24 @@ export function CustomMenu({ visible, onDismiss, menuItems }) {
       <View style={styles.container}>
         <MenuButton />
         {visible && (
-          <View style={styles.webMenuContent}>
-            {menuItems.map((item, index) => (
-              <MenuItem key={index} item={item} />
-            ))}
-          </View>
+          <>
+            <Pressable 
+              style={styles.webOverlay}
+              onPress={() => onDismiss(false)}
+            />
+            <View style={styles.webMenuContent}>
+              {menuItems.map((item, index) => (
+                <MenuItem key={index} item={item} />
+              ))}
+            </View>
+          </>
         )}
       </View>
     );
   }
 
   return (
-    <>
+    <View style={styles.container}>
       <MenuButton />
       <Modal
         visible={visible}
@@ -64,14 +70,17 @@ export function CustomMenu({ visible, onDismiss, menuItems }) {
           style={styles.modalOverlay}
           onPress={() => onDismiss(false)}
         >
-          <View style={styles.modalContent}>
+          <Pressable 
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
             {menuItems.map((item, index) => (
               <MenuItem key={index} item={item} />
             ))}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
-    </>
+    </View>
   );
 }
 
@@ -81,6 +90,15 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     margin: 0,
+  },
+  webOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 999,
   },
   webMenuContent: {
     position: 'absolute',

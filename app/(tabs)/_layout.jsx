@@ -5,11 +5,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { CustomMenu } from '../../components/ui/CustomMenu';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function TabsLayout() {
   const router = useRouter();
   const [menuVisible, setMenuVisible] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     checkUserRole();
@@ -94,20 +96,29 @@ export default function TabsLayout() {
     
     if (isAdmin) {
       items.push({
+        title: t('report'),
         icon: 'chart-bar',
-        title: 'Report',
         onPress: handleReport
       });
     }
-    
+
     items.push({
+      title: t('settings'),
+      icon: 'cog',
+      onPress: () => {
+        router.push('/settings');
+        setMenuVisible(false);
+      },
+    });
+
+    items.push({
+      title: t('logout'),
       icon: 'logout',
-      title: 'Sign Out',
       onPress: handleSignOut
     });
     
     return items;
-  }, [isAdmin, handleReport, handleSignOut]);
+  }, [isAdmin, handleReport, handleSignOut, router, t]);
 
   return (
     <PaperProvider>
@@ -133,7 +144,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="sales" 
           options={{ 
-            title: 'Sales',
+            title: t('sales'),
             tabBarIcon: ({ color }) => (
               <Ionicons name="cash-outline" size={24} color={color} />
             ),
@@ -142,7 +153,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="expense" 
           options={{ 
-            title: 'Expense',
+            title: t('expense'),
             tabBarIcon: ({ color }) => (
               <Ionicons name="wallet-outline" size={24} color={color} />
             ),
@@ -151,7 +162,7 @@ export default function TabsLayout() {
         <Tabs.Screen 
           name="report" 
           options={{ 
-            title: 'Report',
+            title: t('report'),
             href: null,
           }} 
         />
