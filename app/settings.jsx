@@ -110,36 +110,42 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  section: {
-    marginTop: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    marginHorizontal: 16,
-    padding: 16,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 4,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  section: {
+    marginTop: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
+    color: '#4CAF50',
+    marginBottom: 12,
   },
   option: {
     flexDirection: 'row',
@@ -158,12 +164,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   optionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#333',
     marginLeft: 12,
   },
   optionValue: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
     marginRight: 8,
   },
@@ -174,9 +180,9 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 16,
     maxHeight: '80%',
   },
   modalHeader: {
@@ -190,7 +196,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#4CAF50',
   },
   closeButton: {
     padding: 4,
@@ -204,7 +210,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   selectedLanguage: {
     backgroundColor: '#E8F5E9',
@@ -215,6 +222,6 @@ const styles = StyleSheet.create({
   },
   selectedLanguageText: {
     color: '#4CAF50',
-    fontWeight: '500',
+    fontWeight: '600',
   },
 }); 

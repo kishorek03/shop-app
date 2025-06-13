@@ -16,10 +16,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const { API_BASE_URL } = getEnvConfig();
+
 const { width } = Dimensions.get('window');
 
 export default function SalesScreen() {
@@ -470,16 +472,16 @@ export default function SalesScreen() {
           <Animated.View 
             key={index} 
             style={[
-              styles.card,
+              styles.saleContainer,
               {
                 opacity: fadeAnim,
                 transform: [{ scale: scaleAnim }]
               }
             ]}
           >
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Item {index + 1}</Text>
-              <View style={styles.cardActions}>
+            <View style={styles.saleHeader}>
+              <Text style={styles.saleTitle}>Item {index + 1}</Text>
+              <View style={styles.removeButton}>
                 {sales.length > 1 && (
                   <TouchableOpacity 
                     onPress={() => removeSale(index)}
@@ -670,216 +672,194 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    paddingTop: Platform.OS === 'android' ? 8 : 0,
   },
   mainContainer: {
     flex: 1,
   },
   scrollContainer: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 16,
+    paddingBottom: Platform.OS === 'android' ? 80 : 32,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  summaryContainer: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#4CAF50',
+  },
+  totalLabel: {
+    fontSize: 15,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  totalValue: {
+    fontSize: 15,
+    color: '#4CAF50',
+    fontWeight: 'bold',
+  },
+  saleContainer: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  saleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  saleTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  removeButton: {
+    padding: 8,
+  },
+  inputContainer: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+  },
+  picker: {
+    height: 50,
+    width: '100%',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    padding: 8,
+    fontSize: 13,
+    backgroundColor: '#fff',
+    height: 40,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  checkbox: {
+    marginRight: 8,
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  addButton: {
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginBottom: Platform.OS === 'android' ? 16 : 0,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
   },
   loadingText: {
-    marginTop: 15,
-    color: '#2E7D32',
+    marginTop: 12,
     fontSize: 16,
-    fontWeight: '600',
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2E7D32',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  smallButton: {
-    padding: 6,
-  },
-  label: {
-    fontWeight: '600',
-    marginTop: 5,
-    marginBottom: 8,
-    color: '#2E7D32',
-    fontSize: 14,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-    fontSize: 15,
-    color: '#333',
-  },
-  priceInput: {
-    backgroundColor: '#f0f9f0',
-    fontWeight: 'bold',
-    color: '#2E7D32',
-  },
-  parcelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    justifyContent: 'space-between',
-    paddingHorizontal: 5,
-  },
-  checkboxLabel: {
-    marginRight: 10,
-    color: '#2E7D32',
-    fontSize: 15,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginBottom: 12,
-    overflow: 'hidden',
-    backgroundColor: '#f9f9f9',
-  },
-  picker: {
-    height: 46,
-    color: '#333',
-    fontSize: 15,
-  },
-  summaryContainer: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  summaryCard: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-    marginRight: 12,
-    minWidth: width * 0.35,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e8f5e9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  summaryContent: {
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 14,
     color: '#666',
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2e7d32',
-  },
-  totalContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginBottom: 16,
-  },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#2E7D32',
-  },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-  },
-  paymentContainer: {
-    marginBottom: 0,
-  },
-  submitButton: {
-    backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonDisabled: {
-    backgroundColor: '#81C784',
-  },
-  submitButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 17,
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  submitButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxContainer: {
-    padding: 4,
   },
   lastOrderContainer: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 16,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    shadowRadius: 4,
   },
   lastOrderHeader: {
     flexDirection: 'row',
@@ -887,19 +867,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   lastOrderTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginLeft: 8,
+    color: '#4CAF50',
+    marginBottom: 8,
   },
   lastOrderDetails: {
     marginLeft: 32,
   },
   lastOrderAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 4,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginTop: 4,
   },
   lastOrderInfo: {
     fontSize: 14,
@@ -929,5 +909,106 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 10,
+  },
+  totalAmount: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  paymentContainer: {
+    marginBottom: 0,
+  },
+  buttonDisabled: {
+    backgroundColor: '#81C784',
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  submitButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallButton: {
+    padding: 6,
+  },
+  priceInput: {
+    backgroundColor: '#f0f9f0',
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  parcelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 5,
+  },
+  summaryCard: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 8,
+    minWidth: width * 0.2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#e8f5e9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  summaryValue: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 10,
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  totalAmount: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2E7D32',
   },
 });

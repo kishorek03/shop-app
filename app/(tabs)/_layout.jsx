@@ -128,7 +128,15 @@ export default function TabsLayout() {
           tabBarActiveTintColor: '#2e7d50',
           tabBarInactiveTintColor: '#81c784',
           tabBarLabelStyle: styles.tabLabel,
-          headerStyle: styles.header,
+          headerStyle: {
+            backgroundColor: '#fff',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 4,
+            height: Platform.OS === 'android' ? 64 : 56,
+          },
           headerTitleStyle: styles.headerTitle,
           headerRight: () => (
             <View style={styles.menuContainer}>
@@ -173,31 +181,29 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#f8f9fa',
-    borderTopWidth: 3,
-    borderTopColor: '#e9ecef',
-    height: 60,
-    paddingBottom: 2,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    height: Platform.OS === 'android' ? 64 : 56,
+    paddingBottom: Platform.OS === 'android' ? 8 : 4,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   tabLabel: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Medium',
-    marginBottom: 5,
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#2e7d50',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: Platform.OS === 'android' ? 4 : 2,
   },
   headerTitle: {
-    color: '#2e7d50',
-    fontFamily: 'Poppins-SemiBold',
-    fontSize: 20,
+    color: '#4CAF50',
+    fontSize: 18,
+    fontWeight: '600',
   },
   menuContainer: {
     marginRight: 8,
+    padding: 4,
   },
 });

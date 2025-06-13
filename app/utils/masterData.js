@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import getEnvConfig from '../../config/env';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const { API_BASE_URL } = getEnvConfig();
 
 export const fetchMasterData = async () => {
   try {
@@ -83,4 +84,11 @@ export const getAvailableAddOns = (productId, products, addOns) => {
   return addOns.filter(addOn => 
     selectedProduct.addOnIds.includes(addOn.id)
   );
+};
+
+// Default export containing all utility functions
+export default {
+  fetchMasterData,
+  getAvailableFlavours,
+  getAvailableAddOns
 }; 

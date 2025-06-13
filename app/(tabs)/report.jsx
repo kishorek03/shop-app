@@ -5,28 +5,31 @@ import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import getEnvConfig from '../../config/env';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const { API_BASE_URL } = getEnvConfig();
 const { width } = Dimensions.get('window');
 
 export default function ReportScreen() {
   const router = useRouter();
+  const [viewType, setViewType] = useState('sales'); // 'sales' or 'expense'
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
+  const [expenseData, setExpenseData] = useState([]);
   const [paymentSummary, setPaymentSummary] = useState([]);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [filterPeriod, setFilterPeriod] = useState('month');
@@ -87,8 +90,12 @@ export default function ReportScreen() {
   }, []); // Only run once when component mounts
 
   useEffect(() => {
-    fetchReportData();
-  }, [filterPeriod, selectedProductId, selectedFlavourId, selectedParcel]);
+    if (viewType === 'sales') {
+      fetchReportData();
+    } else {
+      fetchExpenseData();
+    }
+  }, [filterPeriod, startDate, endDate, viewType]);
 
   // Update available flavors when product changes
   useEffect(() => {
@@ -129,7 +136,16 @@ export default function ReportScreen() {
 
   const formatDate = (dateString) => {
     try {
-      const date = new Date(dateString);
+      if (!dateString) return 'N/A';
+      
+      // Handle ISO date string with microseconds
+      const date = new Date(dateString.replace(/\.\d+Z$/, 'Z'));
+      
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateString);
+        return 'Invalid Date';
+      }
+
       return date.toLocaleDateString('en-IN', {
         day: '2-digit',
         month: 'short',
@@ -317,6 +333,132 @@ export default function ReportScreen() {
     }
   };
 
+  const fetchExpenseData = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        router.replace('/');
+        return;
+      }
+
+      // Prepare query parameters based on filters
+      let queryParams = new URLSearchParams();
+      
+      // Add date filters based on filterPeriod or custom date range
+      if (filterPeriod !== 'custom' && filterPeriod !== 'all') {
+        const now = new Date();
+        let startDate;
+        
+        switch (filterPeriod) {
+          case 'today': {
+            const today = new Date();
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+            
+            queryParams.append('start', startOfDay.toISOString());
+            queryParams.append('end', endOfDay.toISOString());
+            break;
+          }
+          case 'week': {
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - 7);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            
+            queryParams.append('start', weekStart.toISOString());
+            queryParams.append('end', endOfDay.toISOString());
+            break;
+          }
+          case 'month': {
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            monthStart.setHours(0, 0, 0, 0);
+            
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            
+            queryParams.append('start', monthStart.toISOString());
+            queryParams.append('end', endOfDay.toISOString());
+            break;
+          }
+          case 'year': {
+            const yearStart = new Date(now.getFullYear(), 0, 1);
+            yearStart.setHours(0, 0, 0, 0);
+            
+            queryParams.append('start', yearStart.toISOString());
+            queryParams.append('end', now.toISOString());
+            break;
+          }
+        }
+      } else if (filterPeriod === 'custom' && startDate && endDate) {
+        const startOfDay = new Date(startDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59);
+        
+        queryParams.append('start', startOfDay.toISOString());
+        queryParams.append('end', endOfDay.toISOString());
+      }
+
+      // Fetch expense data
+      const response = await fetch(`${API_BASE_URL}/expenses?${queryParams.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const responseData = await response.json();
+      
+      // Extract data from the response structure
+      const expenses = responseData.data || [];
+      
+      // Sort data by createdAt in descending order (latest first)
+      const sortedData = Array.isArray(expenses) ? expenses.sort((a, b) => {
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        return dateB - dateA;
+      }) : [];
+      
+      setExpenseData(sortedData);
+
+      // Calculate payment method totals for insights
+      const paymentMethodTotals = sortedData.reduce((acc, expense) => {
+        const { paymentMethodName, amount } = expense;
+        if (!acc[paymentMethodName]) {
+          acc[paymentMethodName] = 0;
+        }
+        acc[paymentMethodName] += amount;
+        return acc;
+      }, {});
+
+      // Update payment summary for expense view
+      const paymentSummary = Object.entries(paymentMethodTotals).map(([method, total]) => ({
+        paymentMethod: method,
+        totalAmount: total
+      }));
+
+      setPaymentSummary(paymentSummary);
+
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
+    } catch (error) {
+      console.error('Fetch error:', error);
+      Alert.alert('Error', 'Failed to load expense data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredData = useMemo(() => {
     // Sort data by createdAt in descending order (latest first)
     return [...reportData].sort((a, b) => {
@@ -381,6 +523,35 @@ export default function ReportScreen() {
     };
   }, [reportData, products, paymentSummary]);
 
+  const expenseInsights = useMemo(() => {
+    const safeExpenseData = Array.isArray(expenseData) ? expenseData : [];
+    
+    const total = safeExpenseData.reduce((sum, item) => {
+      const amount = typeof item?.amount === 'number' ? item.amount : 0;
+      return sum + amount;
+    }, 0);
+
+    const count = safeExpenseData.length;
+    const categoryTotals = {};
+    const paymentMethodTotals = {};
+
+    safeExpenseData.forEach(item => {
+      if (item.categoryName) {
+        categoryTotals[item.categoryName] = (categoryTotals[item.categoryName] || 0) + item.amount;
+      }
+      if (item.paymentMethodName) {
+        paymentMethodTotals[item.paymentMethodName] = (paymentMethodTotals[item.paymentMethodName] || 0) + item.amount;
+      }
+    });
+
+    return {
+      totalExpenses: total.toFixed(2),
+      expenseCount: count,
+      categoryTotals,
+      paymentMethodTotals
+    };
+  }, [expenseData]);
+
   const renderDatePickerModal = () => (
     <Modal
       visible={showDatePickerModal}
@@ -404,89 +575,55 @@ export default function ReportScreen() {
                 setShowDatePickerModal(false);
               }}
             >
-              <Ionicons name="close-circle" size={28} color="#666" />
+              <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
           </View>
           
           <View style={styles.datePickerContent}>
             <View style={styles.datePickerSection}>
-              <View style={styles.datePickerRow}>
-                <View style={styles.dateLabelContainer}>
+              <TouchableOpacity 
+                style={styles.datePickerButton}
+                onPress={() => {
+                  setSelectedDateType('start');
+                  setShowDatePickerModal(false);
+                  setTimeout(() => {
+                    setShowStartDatePicker(true);
+                  }, 100);
+                }}
+              >
+                <View style={styles.datePickerButtonContent}>
                   <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
-                  <Text style={styles.datePickerLabel}>Start Date</Text>
-                </View>
-                {Platform.OS === 'web' ? (
-                  <input
-                    type="date"
-                    value={tempStartDate ? tempStartDate.toISOString().split('T')[0] : ''}
-                    onChange={(e) => {
-                      const date = new Date(e.target.value);
-                      setTempStartDate(date);
-                      if (!tempEndDate || date > tempEndDate) {
-                        setTempEndDate(date);
-                      }
-                    }}
-                    style={styles.webDateInput}
-                  />
-                ) : (
-                  <TouchableOpacity 
-                    style={styles.datePickerButton}
-                    onPress={() => {
-                      setSelectedDateType('start');
-                      setShowDatePickerModal(false);
-                      setTimeout(() => {
-                        setShowStartDatePicker(true);
-                      }, 100);
-                    }}
-                  >
+                  <View style={styles.datePickerButtonTextContainer}>
+                    <Text style={styles.datePickerLabel}>Start Date</Text>
                     <Text style={styles.datePickerButtonText}>
                       {formatDateForDisplay(tempStartDate)}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={styles.datePickerRow}>
-                <View style={styles.dateLabelContainer}>
-                  <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
-                  <Text style={styles.datePickerLabel}>End Date</Text>
+                  </View>
                 </View>
-                {Platform.OS === 'web' ? (
-                  <input
-                    type="date"
-                    value={tempEndDate ? tempEndDate.toISOString().split('T')[0] : ''}
-                    onChange={(e) => {
-                      const date = new Date(e.target.value);
-                      setTempEndDate(date);
-                    }}
-                    style={styles.webDateInput}
-                  />
-                ) : (
-                  <TouchableOpacity 
-                    style={styles.datePickerButton}
-                    onPress={() => {
-                      setSelectedDateType('end');
-                      setShowDatePickerModal(false);
-                      setTimeout(() => {
-                        setShowEndDatePicker(true);
-                      }, 100);
-                    }}
-                  >
+                <Ionicons name="chevron-down" size={20} color="#666" />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.datePickerButton, { marginTop: 12 }]}
+                onPress={() => {
+                  setSelectedDateType('end');
+                  setShowDatePickerModal(false);
+                  setTimeout(() => {
+                    setShowEndDatePicker(true);
+                  }, 100);
+                }}
+              >
+                <View style={styles.datePickerButtonContent}>
+                  <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+                  <View style={styles.datePickerButtonTextContainer}>
+                    <Text style={styles.datePickerLabel}>End Date</Text>
                     <Text style={styles.datePickerButtonText}>
                       {formatDateForDisplay(tempEndDate)}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.dateRangeInfo}>
-              <Ionicons name="information-circle-outline" size={20} color="#666" />
-              <Text style={styles.dateRangeInfoText}>
-                Select a date range to view sales data for that period
-              </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-down" size={20} color="#666" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -494,13 +631,12 @@ export default function ReportScreen() {
             <TouchableOpacity 
               style={[styles.modalButton, styles.modalButtonCancel]}
               onPress={() => {
-                setTempStartDate(null);
-                setTempEndDate(null);
+                setTempStartDate(startDate);
+                setTempEndDate(endDate);
                 setShowDatePickerModal(false);
               }}
             >
-              <Ionicons name="close" size={20} color="#666" style={styles.buttonIcon} />
-              <Text style={styles.modalButtonText}>Clear</Text>
+              <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.modalButton, styles.modalButtonApply]}
@@ -514,7 +650,6 @@ export default function ReportScreen() {
                 }
               }}
             >
-              <Ionicons name="checkmark" size={20} color="#fff" style={styles.buttonIcon} />
               <Text style={[styles.modalButtonText, styles.modalButtonTextApply]}>Apply</Text>
             </TouchableOpacity>
           </View>
@@ -708,6 +843,68 @@ export default function ReportScreen() {
     );
   };
 
+  const renderToggle = () => (
+    <View style={styles.toggleContainer}>
+      <TouchableOpacity
+        style={[
+          styles.toggleOption,
+          viewType === 'sales' && styles.toggleOptionActive
+        ]}
+        onPress={() => setViewType('sales')}
+      >
+        <Text style={[
+          styles.toggleText,
+          viewType === 'sales' && styles.toggleTextActive
+        ]}>
+          Sales
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.toggleOption,
+          viewType === 'expense' && styles.toggleOptionActive
+        ]}
+        onPress={() => setViewType('expense')}
+      >
+        <Text style={[
+          styles.toggleText,
+          viewType === 'expense' && styles.toggleTextActive
+        ]}>
+          Expense
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderExpenseHeader = () => (
+    <View style={styles.tableHeader}>
+      <Text style={[styles.headerCell, { flex: 2 }]}>Item</Text>
+      <Text style={[styles.headerCell, { flex: 1 }]}>Quantity</Text>
+      <Text style={[styles.headerCell, { flex: 1 }]}>Unit</Text>
+      <Text style={[styles.headerCell, { flex: 1.5 }]}>Amount</Text>
+      <Text style={[styles.headerCell, { flex: 1.5 }]}>Category</Text>
+      <Text style={[styles.headerCell, { flex: 1.5 }]}>Payment</Text>
+      <Text style={[styles.headerCell, { flex: 2 }]}>Date</Text>
+    </View>
+  );
+
+  const renderExpenseItem = ({ item }) => (
+    <Animated.View style={[styles.tableRow, { opacity: fadeAnim }]}>
+      <View style={[styles.cell, { flex: 2 }]}>
+        <Text style={styles.productName}>{item.item}</Text>
+        {item.remarks && (
+          <Text style={styles.categoryName}>{item.remarks}</Text>
+        )}
+      </View>
+      <Text style={[styles.cell, { flex: 1 }]}>{item.quantity.toFixed(2)}</Text>
+      <Text style={[styles.cell, { flex: 1 }]}>{item.unitName}</Text>
+      <Text style={[styles.cell, { flex: 1.5 }]}>₹{item.amount.toFixed(2)}</Text>
+      <Text style={[styles.cell, { flex: 1.5 }]}>{item.categoryName}</Text>
+      <Text style={[styles.cell, { flex: 1.5 }]}>{item.paymentMethodName}</Text>
+      <Text style={[styles.cell, { flex: 2 }]}>{formatDate(item.createdAt)}</Text>
+    </Animated.View>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -720,18 +917,38 @@ export default function ReportScreen() {
   return (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
+        {/* Toggle Component */}
+        {renderToggle()}
+
         {/* Insights Section */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insightsContainer}>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Total Sales</Text>
-            <Text style={styles.insightValue}>₹{insights.totalSales}</Text>
-          </View>
-          {insights.paymentSummary.map((summary, index) => (
-            <View key={index} style={styles.insightCard}>
-              <Text style={styles.insightLabel}>{summary.paymentMethod} Sales</Text>
-              <Text style={styles.insightValue}>₹{summary.totalAmount.toFixed(2)}</Text>
-            </View>
-          ))}
+          {viewType === 'sales' ? (
+            <>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Total Sales</Text>
+                <Text style={styles.insightValue}>₹{insights.totalSales}</Text>
+              </View>
+              {insights.paymentSummary.map((summary, index) => (
+                <View key={index} style={styles.insightCard}>
+                  <Text style={styles.insightLabel}>{summary.paymentMethod} Sales</Text>
+                  <Text style={styles.insightValue}>₹{summary.totalAmount.toFixed(2)}</Text>
+                </View>
+              ))}
+            </>
+          ) : (
+            <>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Total Expenses</Text>
+                <Text style={styles.insightValue}>₹{expenseInsights.totalExpenses}</Text>
+              </View>
+              {Object.entries(expenseInsights.paymentMethodTotals).map(([method, total], index) => (
+                <View key={index} style={styles.insightCard}>
+                  <Text style={styles.insightLabel}>{method} Expenses</Text>
+                  <Text style={styles.insightValue}>₹{total.toFixed(2)}</Text>
+                </View>
+              ))}
+            </>
+          )}
         </ScrollView>
 
         {/* Time Filters */}
@@ -745,10 +962,10 @@ export default function ReportScreen() {
           </ScrollView>
         </View>
 
-        {/* Advanced Filters */}
-        {renderFilters()}
+        {/* Advanced Filters - Only show for Sales view */}
+        {viewType === 'sales' && renderFilters()}
 
-        {/* Date Pickers - Only show on native platforms */}
+        {/* Date Pickers */}
         {Platform.OS !== 'web' && (
           <>
             {showStartDatePicker && (
@@ -787,19 +1004,35 @@ export default function ReportScreen() {
         <View style={styles.tableContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              {renderHeader()}
-              {filteredData.length > 0 ? (
-                <FlatList
-                  data={filteredData}
-                  keyExtractor={(item, index) => `${item.id || index}`}
-                  renderItem={renderItem}
-                  contentContainerStyle={styles.listContainer}
-                  scrollEnabled={false}
-                />
+              {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
+              {viewType === 'sales' ? (
+                filteredData.length > 0 ? (
+                  <FlatList
+                    data={filteredData}
+                    keyExtractor={(item, index) => `${item.id || index}`}
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.listContainer}
+                    scrollEnabled={false}
+                  />
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No sales data available</Text>
+                  </View>
+                )
               ) : (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No sales data available</Text>
-                </View>
+                expenseData.length > 0 ? (
+                  <FlatList
+                    data={expenseData}
+                    keyExtractor={(item, index) => `${item.id || index}`}
+                    renderItem={renderExpenseItem}
+                    contentContainerStyle={styles.listContainer}
+                    scrollEnabled={false}
+                  />
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No expense data available</Text>
+                  </View>
+                )
               )}
             </View>
           </ScrollView>
@@ -808,7 +1041,7 @@ export default function ReportScreen() {
         {/* Refresh Button */}
         <TouchableOpacity 
           style={styles.refreshButton}
-          onPress={fetchReportData}
+          onPress={() => viewType === 'sales' ? fetchReportData() : fetchExpenseData()}
           activeOpacity={0.7}
         >
           <Ionicons name="refresh" size={20} color="#fff" />
@@ -836,23 +1069,23 @@ const styles = StyleSheet.create({
   },
   insightCard: {
     backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-    marginRight: 12,
-    minWidth: width * 0.35,
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 8,
+    minWidth: width * 0.2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 2,
+    elevation: 1,
   },
   insightLabel: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   insightValue: {
-    fontSize: 20,
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#2e7d32',
   },
@@ -868,16 +1101,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: '#f0f0f0',
-    marginRight: 8,
+    marginRight: 6,
   },
   filterButtonActive: {
     backgroundColor: '#4CAF50',
   },
   filterButtonText: {
+    fontSize: 11,
     color: '#666',
     fontWeight: '500',
   },
@@ -897,17 +1131,17 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: 'row',
-    padding: 12,
+    padding: 8,
     backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    minWidth: width * 1.5, // Increased minimum width
+    minWidth: width * 1.1,
   },
   headerCell: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
     color: '#444',
-    paddingHorizontal: 8, // Added horizontal padding
+    paddingHorizontal: 4,
   },
   tableRow: {
     flexDirection: 'row',
@@ -918,17 +1152,18 @@ const styles = StyleSheet.create({
     minWidth: width * 1.5, // Match header width
   },
   cell: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#333',
-    paddingHorizontal: 8, // Added horizontal padding
+    padding: 6,
+    paddingHorizontal: 4,
   },
   productName: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '500',
     color: '#333',
   },
   categoryName: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#666',
     marginTop: 2,
   },
@@ -1012,13 +1247,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   datePickerModal: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    width: '90%',
+    borderRadius: 12,
+    width: '100%',
     maxWidth: 400,
-    padding: 24,
+    padding: 16,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1029,13 +1265,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
+    marginBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#333',
   },
@@ -1043,71 +1279,56 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   datePickerContent: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   datePickerSection: {
     backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  datePickerRow: {
-    marginBottom: 16,
-  },
-  dateLabelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  datePickerLabel: {
-    fontSize: 15,
-    color: '#444',
-    marginLeft: 8,
-    fontWeight: '500',
+    borderRadius: 8,
+    padding: 12,
   },
   datePickerButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#fff',
   },
-  datePickerButtonText: {
-    color: '#333',
-    fontSize: 16,
-  },
-  dateRangeInfo: {
+  datePickerButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f7ff',
-    padding: 12,
-    borderRadius: 8,
-  },
-  dateRangeInfoText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#666',
     flex: 1,
+  },
+  datePickerButtonTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  datePickerLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  datePickerButtonText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
   },
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 12,
-    paddingTop: 16,
+    gap: 8,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#eee',
   },
   modalButton: {
-    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    minWidth: 80,
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    minWidth: 100,
-    justifyContent: 'center',
   },
   modalButtonCancel: {
     backgroundColor: '#f0f0f0',
@@ -1116,24 +1337,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
   },
   modalButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
+    fontWeight: '500',
   },
   modalButtonTextApply: {
     color: '#fff',
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  webDateInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#fff',
-    width: '100%',
-    fontSize: 16,
-    color: '#333',
   },
   checkboxContainer: {
     marginTop: 8,
@@ -1151,5 +1360,56 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#333',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 25,
+    padding: 4,
+    margin: 15,
+    marginBottom: 0,
+  },
+  toggleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleOptionActive: {
+    backgroundColor: '#4CAF50',
+  },
+  toggleText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  toggleTextActive: {
+    color: '#fff',
   },
 });
