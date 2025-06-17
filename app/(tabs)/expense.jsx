@@ -16,11 +16,13 @@ import {
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAppFont } from '../_layout';
 
 const { API_BASE_URL } = getEnvConfig();
 
 export default function ExpenseScreen() {
   const { t } = useLanguage();
+  const { fontFamily } = useAppFont();
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.95));
@@ -87,12 +89,10 @@ export default function ExpenseScreen() {
         throw new Error('Invalid units data format');
       }
 
-      // Process and validate units
       const validUnits = unitsData.data
         .filter(unit => {
-          // Check if unit exists and has required properties
           const isValid = unit && 
-            (unit.id || unit.unitId) && // Check for either id or unitId
+            (unit.id || unit.unitId) && 
             unit.name;
           
           if (!isValid) {
@@ -101,7 +101,7 @@ export default function ExpenseScreen() {
           return isValid;
         })
         .map(unit => ({
-          id: Number(unit.id || unit.unitId), // Handle both id and unitId
+          id: Number(unit.id || unit.unitId), 
           name: unit.name,
           abbreviation: unit.abbreviation || ''
         }));
@@ -117,7 +117,7 @@ export default function ExpenseScreen() {
     } catch (error) {
       console.error('Error loading units:', error);
       Alert.alert('Error', error.message || 'Failed to load units. Please check your connection.');
-      setUnits([]); // Set empty array on error
+      setUnits([]); 
     }
   };
 
@@ -130,7 +130,7 @@ export default function ExpenseScreen() {
         return;
       }
 
-      // Fetch categories
+
       const categoriesResponse = await fetch(`${API_BASE_URL}/categories`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -152,7 +152,6 @@ export default function ExpenseScreen() {
         throw new Error('Invalid categories data format');
       }
 
-      // Filter only expense categories
       const expenseCategories = categoriesData.data.filter(
         category => category && category.categoryType === 'EXPENSE'
       );
@@ -167,7 +166,7 @@ export default function ExpenseScreen() {
     } catch (error) {
       console.error('Error loading categories:', error);
       Alert.alert('Error', error.message || 'Failed to load categories. Please check your connection.');
-      setCategories([]); // Set empty array on error
+      setCategories([]); 
     } finally {
       setLoading(false);
     }
@@ -216,7 +215,7 @@ export default function ExpenseScreen() {
         item: expense.item,
         quantity: expense.quantity ? parseInt(expense.quantity) : 1,
         amount: parseFloat(expense.amount),
-        unitId: Number(expense.unitId), // Ensure unitId is a number
+        unitId: Number(expense.unitId), 
         categoryId: parseInt(expense.categoryId),
         paymentMethodId: paymentMethodId,
         remarks: expense.remarks || ''
@@ -269,7 +268,7 @@ export default function ExpenseScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading data...</Text>
+        <Text style={[styles.loadingText, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('loadingData')}</Text>
       </View>
     );
   }
@@ -296,7 +295,7 @@ export default function ExpenseScreen() {
         >
           <View style={styles.successContent}>
             <Ionicons name="checkmark-circle" size={20} color="#fff" />
-            <Text style={styles.successText}>Expense recorded successfully!</Text>
+            <Text style={[styles.successText, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}>{t('expenseRecorded')}</Text>
           </View>
         </Animated.View>
       )}
@@ -313,36 +312,24 @@ export default function ExpenseScreen() {
         >
           <View style={styles.lastExpenseHeader}>
             <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.lastExpenseTitle}>Last Expense</Text>
+            <Text style={[styles.lastExpenseTitle, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}>{t('lastExpense')}</Text>
           </View>
           <View style={styles.lastExpenseDetails}>
-            <Text style={styles.lastExpenseItem}>{lastExpense.item}</Text>
-            <Text style={styles.lastExpenseAmount}>₹{lastExpense.amount.toFixed(2)}</Text>
-            <Text style={styles.lastExpenseInfo}>
+            <Text style={[styles.lastExpenseItem, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{lastExpense.item}</Text>
+            <Text style={[styles.lastExpenseAmount, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{lastExpense.amount.toFixed(2)}</Text>
+            <Text style={[styles.lastExpenseInfo, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>
               {new Date(lastExpense.timestamp).toLocaleTimeString()}
             </Text>
           </View>
         </Animated.View>
       )}
 
-      <Animated.View 
-        style={[
-          styles.formContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>New Expense</Text>
-        </View>
-
+      <View style={styles.formContainer}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Item Name</Text>
+          <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('item')}</Text>
           <TextInput
-            style={styles.input}
-            placeholder="Enter item name"
+            style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+            placeholder={t('enterItem')}
             placeholderTextColor="#888"
             value={expense.item}
             onChangeText={(value) => setExpense({ ...expense, item: value })}
@@ -351,10 +338,10 @@ export default function ExpenseScreen() {
 
         <View style={styles.rowContainer}>
           <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
-            <Text style={styles.label}>Quantity</Text>
+            <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('quantity')}</Text>
             <TextInput
-              style={styles.input}
-              placeholder="Enter quantity"
+              style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+              placeholder={t('enterQuantity')}
               placeholderTextColor="#888"
               keyboardType="numeric"
               value={expense.quantity}
@@ -363,7 +350,7 @@ export default function ExpenseScreen() {
           </View>
 
           <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
-            <Text style={styles.label}>Unit</Text>
+            <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('unit')}</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={expense.unitId}
@@ -376,8 +363,10 @@ export default function ExpenseScreen() {
                 }}
                 style={styles.picker}
                 dropdownIconColor="#4CAF50"
+                mode="dropdown"
+                enabled={units.length > 0}
               >
-                <Picker.Item label="Select Unit" value="" />
+                <Picker.Item label={t('selectUnit')} value="" color="#888" style={{ fontFamily }} />
                 {units.map((unit) => (
                   <Picker.Item 
                     key={`unit-${unit.id}`}
@@ -391,10 +380,10 @@ export default function ExpenseScreen() {
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Amount</Text>
+          <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('amount')}</Text>
           <TextInput
-            style={styles.input}
-            placeholder="Enter amount"
+            style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+            placeholder={t('enterAmount')}
             placeholderTextColor="#888"
             keyboardType="numeric"
             value={expense.amount}
@@ -403,15 +392,17 @@ export default function ExpenseScreen() {
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Category</Text>
+          <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('category')}</Text>
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={expense.categoryId}
               onValueChange={(value) => setExpense({ ...expense, categoryId: value })}
               style={styles.picker}
               dropdownIconColor="#4CAF50"
+              mode="dropdown"
+              enabled={categories.length > 0}
             >
-              <Picker.Item label="Select Category" value="" />
+              <Picker.Item label={t('selectCategory')} value="" color="#888" style={{ fontFamily }} />
               {Array.isArray(categories) && categories.map((category) => (
                 category && category.id && category.categoryName ? (
                   <Picker.Item 
@@ -436,7 +427,8 @@ export default function ExpenseScreen() {
             <Text style={[
               styles.paymentModeText,
               paymentMode === 'cash' && styles.paymentModeTextActive,
-            ]}>Cash</Text>
+              { fontFamily, lineHeight: 18, paddingVertical: 2 }
+            ]}>{t('cash')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -448,15 +440,16 @@ export default function ExpenseScreen() {
             <Text style={[
               styles.paymentModeText,
               paymentMode === 'upi' && styles.paymentModeTextActive,
-            ]}>UPI</Text>
+              { fontFamily, lineHeight: 18, paddingVertical: 2 }
+            ]}>{t('upi')}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Remarks</Text>
+          <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('remarks')}</Text>
           <TextInput
-            style={[styles.input, styles.remarksInput]}
-            placeholder="Enter remarks (optional)"
+            style={[styles.input, styles.remarksInput, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+            placeholder={t('enterRemarks')}
             placeholderTextColor="#888"
             multiline
             numberOfLines={3}
@@ -477,12 +470,12 @@ export default function ExpenseScreen() {
             ) : (
               <View style={styles.submitButtonInner}>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                <Text style={styles.submitButtonText}>Record Expense</Text>
+                <Text style={[styles.loginButtonText, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}>{t('submitExpense')}</Text>
               </View>
             )}
           </View>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </ScrollView>
   );
 }
@@ -490,12 +483,14 @@ export default function ExpenseScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    backgroundColor: '#fff',
+    minHeight: 300,
   },
   scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
     padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 80 : 32,
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -505,11 +500,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   title: {
     fontSize: 20,
@@ -522,10 +513,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderColor: '#ccc', 
+    borderWidth: 1,
   },
   inputContainer: {
     marginBottom: 16,
@@ -543,6 +532,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fff',
     height: 50,
+    width: '100%',
   },
   pickerContainer: {
     borderWidth: 1,
@@ -550,10 +540,19 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginBottom: 8,
     backgroundColor: '#fff',
-  },
-  picker: {
-    height: 50,
+    minHeight: 48,
+    justifyContent: 'center',
     width: '100%',
+    alignItems: 'stretch',
+  },
+  
+  picker: {
+    height: 48,
+    color: '#333',
+    backgroundColor: '#fff',
+    width: '100%',
+    paddingHorizontal: 8,
+    fontSize: 12,
   },
   paymentModeContainer: {
     flexDirection: 'row',
@@ -561,11 +560,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   paymentModeButton: {
     flex: 1,
@@ -595,11 +590,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
     marginBottom: Platform.OS === 'android' ? 16 : 0,
   },
   submitButtonText: {
@@ -642,11 +633,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   lastExpenseHeader: {
     flexDirection: 'row',
@@ -696,5 +683,10 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: '#81C784',
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

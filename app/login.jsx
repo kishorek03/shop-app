@@ -16,6 +16,8 @@ import {
   View,
 } from 'react-native';
 import getEnvConfig from '../config/env';
+import { useLanguage } from '../context/LanguageContext';
+import { useAppFont } from './_layout';
 
 const { API_BASE_URL } = getEnvConfig();
 
@@ -32,6 +34,8 @@ const decodeJWT = (token) => {
 };
 
 export default function LoginScreen() {
+  const { t } = useLanguage();
+  const { fontFamily } = useAppFont();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,14 +118,15 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
         <View style={styles.content}>
-          <Text style={[styles.welcomeText, { color: '#333' }]}>Welcome Back!</Text>
-          <Text style={[styles.subtitleText, { color: '#666' }]}>Sign in to continue</Text>
+          <Text style={[styles.welcomeText, { color: '#333', fontFamily, lineHeight: 32, paddingVertical: 6 }]}>{t('welcomeBack')}</Text>
+          <Text style={[styles.subtitleText, { color: '#666', fontFamily, lineHeight: 24, paddingVertical: 4 }]}>{t('signInToContinue')}</Text>
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
               <Ionicons name="person-outline" size={20} color="#444" style={styles.inputIcon} />
+              <Text style={[styles.label, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}></Text>
               <TextInput
-                style={styles.input}
-                placeholder="Username"
+                style={[styles.input, { fontFamily, lineHeight: 26, paddingVertical: 8 }]}
+                placeholder={t('username')}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -130,9 +135,10 @@ export default function LoginScreen() {
             </View>
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={20} color="#444" style={styles.inputIcon} />
+              <Text style={[styles.label, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}></Text>
               <TextInput
-                style={styles.input}
-                placeholder="Password"
+                style={[styles.input, { fontFamily, lineHeight: 26, paddingVertical: 8 }]}
+                placeholder={t('password')}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -150,7 +156,7 @@ export default function LoginScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.loginButtonText}>Login</Text>
+                  <Text style={[styles.loginButtonText, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}>{t('login')}</Text>
                 )}
               </Pressable>
             </Animated.View>
@@ -177,6 +183,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#4CAF50',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitleText: {
     fontSize: 16,
@@ -188,11 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -220,10 +223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   loginButtonDisabled: {
     backgroundColor: '#81C784',
@@ -232,5 +232,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  label: {
+    fontSize: 16,
+    color: '#333',
   },
 });

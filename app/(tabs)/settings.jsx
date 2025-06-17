@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const languages = [
   { code: 'en' },
@@ -24,20 +24,9 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{t('settings')}</Text>
-      </View>
-
+    <View style={styles.container}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('preferences')}</Text>
-        
         <TouchableOpacity 
           style={styles.option}
           onPress={() => setShowLanguageModal(true)}
@@ -72,8 +61,7 @@ export default function SettingsScreen() {
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.languageList}>
+            <ScrollView style={styles.languageList} contentContainerStyle={{ flexGrow: 1 }}>
               {languages.map((language) => (
                 <TouchableOpacity
                   key={language.code}
@@ -98,7 +86,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -115,10 +103,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   backButton: {
     marginRight: 12,
@@ -136,10 +121,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 16,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   sectionTitle: {
     fontSize: 16,
@@ -176,14 +158,15 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderRadius: 16,
     paddingBottom: 16,
-    maxHeight: '80%',
+    width: '90%',
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -203,6 +186,7 @@ const styles = StyleSheet.create({
   },
   languageList: {
     padding: 16,
+    maxHeight: 300,
   },
   languageOption: {
     flexDirection: 'row',

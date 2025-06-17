@@ -12,7 +12,7 @@ const getEnvironment = (): Environment => {
 // Environment-specific configurations
 const ENV = {
   development: {
-    API_BASE_URL: 'http://localhost:8080/api',
+    API_BASE_URL: 'http://192.168.55.32:8080/api',
   },
   qa: {
     API_BASE_URL: 'https://transaction-manager.fly.dev/api', // Replace with your QA API URL

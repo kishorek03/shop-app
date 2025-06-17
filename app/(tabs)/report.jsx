@@ -5,18 +5,18 @@ import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
@@ -24,9 +24,38 @@ import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 const { API_BASE_URL } = getEnvConfig();
 const { width } = Dimensions.get('window');
 
+// Define column widths for consistency
+const COLUMN_WIDTHS = {
+  date: 110,
+  product: 130,
+  flavour: 100,
+  qty: 70,
+  price: 90,
+  total: 90,
+  type: 80,
+  // Expense columns
+  description: 160,
+  amount: 100,
+  category: 110,
+};
+
+// For expense table, define the columns and their widths
+const EXPENSE_COLUMN_WIDTHS = {
+  date: 110,
+  item: 130,
+  quantity: 70,
+  unit: 70,
+  amount: 90,
+  category: 110,
+  payment: 110,
+  remarks: 120,
+};
+
+const EXPENSE_TABLE_WIDTH = Object.values(EXPENSE_COLUMN_WIDTHS).reduce((a, b) => a + b, 0);
+
 export default function ReportScreen() {
   const router = useRouter();
-  const [viewType, setViewType] = useState('sales'); // 'sales' or 'expense'
+  const [viewType, setViewType] = useState('sales'); 
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
   const [expenseData, setExpenseData] = useState([]);
@@ -39,9 +68,7 @@ export default function ReportScreen() {
   const [selectedParcel, setSelectedParcel] = useState('all');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState('all');
   
-  // Date range picker states
   const [startDate, setStartDate] = useState(() => {
-    // Set initial start date to first day of current month
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
@@ -49,16 +76,14 @@ export default function ReportScreen() {
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  // Store product, flavour, and addon details
   const [products, setProducts] = useState([]);
   const [flavours, setFlavours] = useState([]);
   const [addOns, setAddOns] = useState([]);
 
-  // Add state for available flavors based on selected product
   const [availableFlavours, setAvailableFlavours] = useState([]);
 
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [selectedDateType, setSelectedDateType] = useState('start'); // 'start' or 'end'
+  const [selectedDateType, setSelectedDateType] = useState('start'); 
 
   const [tempStartDate, setTempStartDate] = useState(null);
   const [tempEndDate, setTempEndDate] = useState(null);
@@ -67,7 +92,6 @@ export default function ReportScreen() {
     checkAccess();
   }, []);
 
-  // Separate useEffect for fetching master data
   useEffect(() => {
     const loadMasterData = async () => {
       try {
@@ -87,7 +111,7 @@ export default function ReportScreen() {
     };
 
     loadMasterData();
-  }, []); // Only run once when component mounts
+  }, []); 
 
   useEffect(() => {
     if (viewType === 'sales') {
@@ -97,7 +121,6 @@ export default function ReportScreen() {
     }
   }, [filterPeriod, startDate, endDate, viewType]);
 
-  // Update available flavors when product changes
   useEffect(() => {
     if (selectedProductId === 'all') {
       setAvailableFlavours(flavours);
@@ -138,7 +161,6 @@ export default function ReportScreen() {
     try {
       if (!dateString) return 'N/A';
       
-      // Handle ISO date string with microseconds
       const date = new Date(dateString.replace(/\.\d+Z$/, 'Z'));
       
       if (isNaN(date.getTime())) {
@@ -169,14 +191,38 @@ export default function ReportScreen() {
     });
   };
 
-  const handleDateSelection = (date) => {
-    if (selectedDateType === 'start') {
-      setTempStartDate(date);
-      if (!tempEndDate || date > tempEndDate) {
-        setTempEndDate(date);
+  const handleDateChange = (event, selectedDate) => {
+    if (event.type === 'set' && selectedDate) {
+      if (selectedDateType === 'start') {
+        setTempStartDate(selectedDate);
+        setShowStartDatePicker(false);
+      } else {
+        setTempEndDate(selectedDate);
+        setShowEndDatePicker(false);
       }
     } else {
-      setTempEndDate(date);
+      // Handle cancel or dismiss
+      if (selectedDateType === 'start') {
+        setShowStartDatePicker(false);
+      } else {
+        setShowEndDatePicker(false);
+      }
+    }
+  };
+
+  const applyDateFilter = () => {
+    if (tempStartDate && tempEndDate) {
+      // Set start date to beginning of day (00:00:00)
+      const startOfDay = new Date(tempStartDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      // Set end date to end of day (23:59:59)
+      const endOfDay = new Date(tempEndDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      setStartDate(startOfDay);
+      setEndDate(endOfDay);
+      setFilterPeriod('custom');
     }
     setShowDatePickerModal(false);
   };
@@ -191,75 +237,59 @@ export default function ReportScreen() {
         return;
       }
 
-      // Prepare query parameters based on filters
       let queryParams = new URLSearchParams();
       
-      // Add date filters based on filterPeriod or custom date range
       if (filterPeriod !== 'custom' && filterPeriod !== 'all') {
         const now = new Date();
         let startDate;
         
         switch (filterPeriod) {
           case 'today': {
-            // Get today's date in local timezone
             const today = new Date();
             const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
             const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
             
-            // Convert to UTC while preserving the local date
-            const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000);
-            const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
-            
-            queryParams.append('startDate', startUTC.toISOString());
-            queryParams.append('endDate', endUTC.toISOString());
+            queryParams.append('startDate', startOfDay.toISOString());
+            queryParams.append('endDate', endOfDay.toISOString());
             break;
           }
           case 'week': {
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() - 7);
             weekStart.setHours(0, 0, 0, 0);
-            const weekStartUTC = new Date(weekStart.getTime() - weekStart.getTimezoneOffset() * 60000);
             
-            // Set end date to end of current day
             const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            const endOfDayUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
             
-            queryParams.append('startDate', weekStartUTC.toISOString());
-            queryParams.append('endDate', endOfDayUTC.toISOString());
+            queryParams.append('startDate', weekStart.toISOString());
+            queryParams.append('endDate', endOfDay.toISOString());
             break;
           }
           case 'month': {
             const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
             monthStart.setHours(0, 0, 0, 0);
-            const monthStartUTC = new Date(monthStart.getTime() - monthStart.getTimezoneOffset() * 60000);
             
-            // Set end date to end of current day
             const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            const endOfDayUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
             
-            queryParams.append('startDate', monthStartUTC.toISOString());
-            queryParams.append('endDate', endOfDayUTC.toISOString());
+            queryParams.append('startDate', monthStart.toISOString());
+            queryParams.append('endDate', endOfDay.toISOString());
             break;
           }
           case 'year': {
             const yearStart = new Date(now.getFullYear(), 0, 1);
             yearStart.setHours(0, 0, 0, 0);
-            const yearStartUTC = new Date(yearStart.getTime() - yearStart.getTimezoneOffset() * 60000);
-            queryParams.append('startDate', yearStartUTC.toISOString());
-            queryParams.append('endDate', now.toISOString());
+            
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            
+            queryParams.append('startDate', yearStart.toISOString());
+            queryParams.append('endDate', endOfDay.toISOString());
             break;
           }
         }
       } else if (filterPeriod === 'custom' && startDate && endDate) {
-        // Set end date to end of day
-        const endOfDay = new Date(endDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        
         queryParams.append('startDate', startDate.toISOString());
-        queryParams.append('endDate', endOfDay.toISOString());
+        queryParams.append('endDate', endDate.toISOString());
       }
 
-      // Add other filters
       if (selectedProductId !== 'all') {
         queryParams.append('productId', selectedProductId);
       }
@@ -274,7 +304,6 @@ export default function ReportScreen() {
         queryParams.append('parcel', selectedParcel === 'yes');
       }
 
-      // Fetch sales data
       const salesResponse = await fetch(`${API_BASE_URL}/sales/fetch?${queryParams.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -289,7 +318,6 @@ export default function ReportScreen() {
       const salesData = await salesResponse.json();
       setReportData(salesData || []);
 
-      // Fetch payment summary
       const summaryResponse = await fetch(`${API_BASE_URL}/orders/summary?start=${queryParams.get('startDate')}&end=${queryParams.get('endDate')}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -300,7 +328,6 @@ export default function ReportScreen() {
       if (summaryResponse.ok) {
         const summaryData = await summaryResponse.json();
         if (summaryData.status === 'success' && Array.isArray(summaryData.data)) {
-          // Aggregate the payment method totals
           const paymentMethodTotals = summaryData.data.reduce((acc, order) => {
             const { paymentMethod, totalAmount } = order;
             if (!acc[paymentMethod]) {
@@ -310,7 +337,6 @@ export default function ReportScreen() {
             return acc;
           }, {});
 
-          // Convert to array format for display
           const paymentSummary = Object.entries(paymentMethodTotals).map(([method, total]) => ({
             paymentMethod: method,
             totalAmount: total
@@ -343,10 +369,8 @@ export default function ReportScreen() {
         return;
       }
 
-      // Prepare query parameters based on filters
       let queryParams = new URLSearchParams();
       
-      // Add date filters based on filterPeriod or custom date range
       if (filterPeriod !== 'custom' && filterPeriod !== 'all') {
         const now = new Date();
         let startDate;
@@ -355,7 +379,7 @@ export default function ReportScreen() {
           case 'today': {
             const today = new Date();
             const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
             
             queryParams.append('start', startOfDay.toISOString());
             queryParams.append('end', endOfDay.toISOString());
@@ -366,7 +390,7 @@ export default function ReportScreen() {
             weekStart.setDate(now.getDate() - 7);
             weekStart.setHours(0, 0, 0, 0);
             
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
             
             queryParams.append('start', weekStart.toISOString());
             queryParams.append('end', endOfDay.toISOString());
@@ -376,7 +400,7 @@ export default function ReportScreen() {
             const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
             monthStart.setHours(0, 0, 0, 0);
             
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
             
             queryParams.append('start', monthStart.toISOString());
             queryParams.append('end', endOfDay.toISOString());
@@ -386,20 +410,16 @@ export default function ReportScreen() {
             const yearStart = new Date(now.getFullYear(), 0, 1);
             yearStart.setHours(0, 0, 0, 0);
             
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            
             queryParams.append('start', yearStart.toISOString());
-            queryParams.append('end', now.toISOString());
+            queryParams.append('end', endOfDay.toISOString());
             break;
           }
         }
       } else if (filterPeriod === 'custom' && startDate && endDate) {
-        const startOfDay = new Date(startDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(endDate);
-        endOfDay.setHours(23, 59, 59);
-        
-        queryParams.append('start', startOfDay.toISOString());
-        queryParams.append('end', endOfDay.toISOString());
+        queryParams.append('start', startDate.toISOString());
+        queryParams.append('end', endDate.toISOString());
       }
 
       // Fetch expense data
@@ -416,10 +436,8 @@ export default function ReportScreen() {
 
       const responseData = await response.json();
       
-      // Extract data from the response structure
       const expenses = responseData.data || [];
       
-      // Sort data by createdAt in descending order (latest first)
       const sortedData = Array.isArray(expenses) ? expenses.sort((a, b) => {
         const dateA = new Date(a.createdAt);
         const dateB = new Date(b.createdAt);
@@ -428,7 +446,6 @@ export default function ReportScreen() {
       
       setExpenseData(sortedData);
 
-      // Calculate payment method totals for insights
       const paymentMethodTotals = sortedData.reduce((acc, expense) => {
         const { paymentMethodName, amount } = expense;
         if (!acc[paymentMethodName]) {
@@ -438,7 +455,6 @@ export default function ReportScreen() {
         return acc;
       }, {});
 
-      // Update payment summary for expense view
       const paymentSummary = Object.entries(paymentMethodTotals).map(([method, total]) => ({
         paymentMethod: method,
         totalAmount: total
@@ -460,7 +476,6 @@ export default function ReportScreen() {
   };
 
   const filteredData = useMemo(() => {
-    // Sort data by createdAt in descending order (latest first)
     return [...reportData].sort((a, b) => {
       const dateA = new Date(a?.createdAt || 0);
       const dateB = new Date(b?.createdAt || 0);
@@ -469,7 +484,6 @@ export default function ReportScreen() {
   }, [reportData]);
 
   const insights = useMemo(() => {
-    // Ensure reportData is an array
     const safeReportData = Array.isArray(reportData) ? reportData : [];
     
     const total = safeReportData.reduce((sum, item) => {
@@ -556,99 +570,73 @@ export default function ReportScreen() {
     <Modal
       visible={showDatePickerModal}
       transparent={true}
-      animationType="slide"
-      onRequestClose={() => {
-        setTempStartDate(startDate);
-        setTempEndDate(endDate);
-        setShowDatePickerModal(false);
-      }}
+      animationType="fade"
+      onRequestClose={() => setShowDatePickerModal(false)}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.datePickerModal}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Date Range</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => {
-                setTempStartDate(startDate);
-                setTempEndDate(endDate);
-                setShowDatePickerModal(false);
-              }}
+              onPress={() => setShowDatePickerModal(false)}
             >
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.datePickerContent}>
             <View style={styles.datePickerSection}>
-              <TouchableOpacity 
+              <Text style={styles.datePickerLabel}>Start Date</Text>
+              <TouchableOpacity
                 style={styles.datePickerButton}
                 onPress={() => {
                   setSelectedDateType('start');
-                  setShowDatePickerModal(false);
-                  setTimeout(() => {
-                    setShowStartDatePicker(true);
-                  }, 100);
+                  setShowStartDatePicker(true);
                 }}
               >
                 <View style={styles.datePickerButtonContent}>
-                  <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+                  <Ionicons name="calendar" size={20} color="#4CAF50" />
                   <View style={styles.datePickerButtonTextContainer}>
-                    <Text style={styles.datePickerLabel}>Start Date</Text>
                     <Text style={styles.datePickerButtonText}>
-                      {formatDateForDisplay(tempStartDate)}
+                      {tempStartDate ? formatDateForDisplay(tempStartDate) : 'Select start date'}
                     </Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-down" size={20} color="#666" />
               </TouchableOpacity>
+            </View>
 
-              <TouchableOpacity 
-                style={[styles.datePickerButton, { marginTop: 12 }]}
+            <View style={styles.datePickerSection}>
+              <Text style={styles.datePickerLabel}>End Date</Text>
+              <TouchableOpacity
+                style={styles.datePickerButton}
                 onPress={() => {
                   setSelectedDateType('end');
-                  setShowDatePickerModal(false);
-                  setTimeout(() => {
-                    setShowEndDatePicker(true);
-                  }, 100);
+                  setShowEndDatePicker(true);
                 }}
               >
                 <View style={styles.datePickerButtonContent}>
-                  <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+                  <Ionicons name="calendar" size={20} color="#4CAF50" />
                   <View style={styles.datePickerButtonTextContainer}>
-                    <Text style={styles.datePickerLabel}>End Date</Text>
                     <Text style={styles.datePickerButtonText}>
-                      {formatDateForDisplay(tempEndDate)}
+                      {tempEndDate ? formatDateForDisplay(tempEndDate) : 'Select end date'}
                     </Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-down" size={20} color="#666" />
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.modalFooter}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonCancel]}
-              onPress={() => {
-                setTempStartDate(startDate);
-                setTempEndDate(endDate);
-                setShowDatePickerModal(false);
-              }}
+              onPress={() => setShowDatePickerModal(false)}
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonApply]}
-              onPress={() => {
-                if (tempStartDate && tempEndDate) {
-                  setStartDate(tempStartDate);
-                  setEndDate(tempEndDate);
-                  setFilterPeriod('custom');
-                  setShowDatePickerModal(false);
-                  fetchReportData();
-                }
-              }}
+              onPress={applyDateFilter}
             >
               <Text style={[styles.modalButtonText, styles.modalButtonTextApply]}>Apply</Text>
             </TouchableOpacity>
@@ -687,12 +675,27 @@ export default function ReportScreen() {
 
   const renderHeader = () => (
     <View style={styles.tableHeader}>
-      <Text style={[styles.headerCell, { flex: 2.5 }]}>Product</Text>
-      <Text style={[styles.headerCell, { flex: 1 }]}>Qty</Text>
-      <Text style={[styles.headerCell, { flex: 1.8 }]}>Billed Amount</Text>
-      <Text style={[styles.headerCell, { flex: 1.8 }]}>Sold Amount</Text>
-      <Text style={[styles.headerCell, { flex: 1.2 }]}>Parcel</Text>
-      <Text style={[styles.headerCell, { flex: 2 }]}>Date</Text>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.date }]}> 
+        <Text style={styles.headerText}>Date</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.product }]}> 
+        <Text style={styles.headerText}>Product</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.flavour }]}> 
+        <Text style={styles.headerText}>Flavour</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.qty }]}> 
+        <Text style={styles.headerText}>Qty</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.price }]}> 
+        <Text style={styles.headerText}>Price</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.total }]}> 
+        <Text style={styles.headerText}>Total</Text>
+      </View>
+      <View style={[styles.headerCell, { width: COLUMN_WIDTHS.type }]}> 
+        <Text style={styles.headerText}>Parcel</Text>
+      </View>
     </View>
   );
 
@@ -702,26 +705,33 @@ export default function ReportScreen() {
     const addOn = item?.addOnId ? addOns.find(a => a?.id === item.addOnId) : null;
 
     return (
-      <Animated.View style={[styles.tableRow, { opacity: fadeAnim }]}>
-        <View style={[styles.cell, { flex: 2.5 }]}>
-          <Text style={styles.productName}>
-            {product?.name || `Product : ${item?.productId || 'NA'}`}
-          </Text>
+      <View style={styles.tableRow}>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.date }]}> 
+          <Text style={styles.cellText}>{formatDate(item?.createdAt) || 'NIL'}</Text>
+        </View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.product }]}> 
+          <Text style={styles.productName}>{product?.name || 'NIL'}</Text>
           <Text style={styles.categoryName}>
-            {flavour ? flavour.name : 'No Flavour'}
+            {flavour ? flavour.name : 'NIL'}
             {addOn ? ` + ${addOn.name}` : ''}
           </Text>
         </View>
-        <Text style={[styles.cell, { flex: 1 }]}>{item?.quantity || 0}</Text>
-        <Text style={[styles.cell, { flex: 1.8 }]}>
-          ₹{(typeof item?.amount === 'number' ? item.amount : 0).toFixed(2)}
-        </Text>
-        <Text style={[styles.cell, { flex: 1.8 }]}>
-          ₹{(typeof item?.salePrice === 'number' ? item.salePrice : 0).toFixed(2)}
-        </Text>
-        <Text style={[styles.cell, { flex: 1.2 }]}>{item?.parcel ? 'Yes' : 'No'}</Text>
-        <Text style={[styles.cell, { flex: 2 }]}>{formatDate(item?.createdAt)}</Text>
-      </Animated.View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.flavour }]}> 
+          <Text style={styles.cellText}>{flavour ? flavour.name : 'NIL'}</Text>
+        </View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.qty }]}> 
+          <Text style={styles.cellText}>{item?.quantity || 'NIL'}</Text>
+        </View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.price }]}> 
+          <Text style={styles.cellText}>₹{(typeof item?.amount === 'number' ? item.amount : 0).toFixed(2)}</Text>
+        </View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.total }]}> 
+          <Text style={styles.cellText}>₹{(typeof item?.salePrice === 'number' ? item.salePrice : 0).toFixed(2)}</Text>
+        </View>
+        <View style={[styles.cell, { width: COLUMN_WIDTHS.type }]}> 
+          <Text style={styles.cellText}>{item?.parcel ? 'Yes' : 'No'}</Text>
+        </View>
+      </View>
     );
   };
 
@@ -878,31 +888,60 @@ export default function ReportScreen() {
 
   const renderExpenseHeader = () => (
     <View style={styles.tableHeader}>
-      <Text style={[styles.headerCell, { flex: 2 }]}>Item</Text>
-      <Text style={[styles.headerCell, { flex: 1 }]}>Quantity</Text>
-      <Text style={[styles.headerCell, { flex: 1 }]}>Unit</Text>
-      <Text style={[styles.headerCell, { flex: 1.5 }]}>Amount</Text>
-      <Text style={[styles.headerCell, { flex: 1.5 }]}>Category</Text>
-      <Text style={[styles.headerCell, { flex: 1.5 }]}>Payment</Text>
-      <Text style={[styles.headerCell, { flex: 2 }]}>Date</Text>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.date }]}> 
+        <Text style={styles.headerText}>Date</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.item }]}> 
+        <Text style={styles.headerText}>Item</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.quantity }]}> 
+        <Text style={styles.headerText}>Qty</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.unit }]}> 
+        <Text style={styles.headerText}>Unit</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.amount }]}> 
+        <Text style={styles.headerText}>Amount</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.category }]}> 
+        <Text style={styles.headerText}>Category</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.payment }]}> 
+        <Text style={styles.headerText}>Payment</Text>
+      </View>
+      <View style={[styles.headerCell, { width: EXPENSE_COLUMN_WIDTHS.remarks }]}> 
+        <Text style={styles.headerText}>Remarks</Text>
+      </View>
     </View>
   );
 
   const renderExpenseItem = ({ item }) => (
-    <Animated.View style={[styles.tableRow, { opacity: fadeAnim }]}>
-      <View style={[styles.cell, { flex: 2 }]}>
-        <Text style={styles.productName}>{item.item}</Text>
-        {item.remarks && (
-          <Text style={styles.categoryName}>{item.remarks}</Text>
-        )}
+    <View style={styles.tableRow}>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.date }]}> 
+        <Text style={styles.cellText}>{formatDate(item?.createdAt) || 'NIL'}</Text>
       </View>
-      <Text style={[styles.cell, { flex: 1 }]}>{item.quantity.toFixed(2)}</Text>
-      <Text style={[styles.cell, { flex: 1 }]}>{item.unitName}</Text>
-      <Text style={[styles.cell, { flex: 1.5 }]}>₹{item.amount.toFixed(2)}</Text>
-      <Text style={[styles.cell, { flex: 1.5 }]}>{item.categoryName}</Text>
-      <Text style={[styles.cell, { flex: 1.5 }]}>{item.paymentMethodName}</Text>
-      <Text style={[styles.cell, { flex: 2 }]}>{formatDate(item.createdAt)}</Text>
-    </Animated.View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.item }]}> 
+        <Text style={styles.cellText}>{item?.item || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.quantity }]}> 
+        <Text style={styles.cellText}>{item?.quantity || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.unit }]}> 
+        <Text style={styles.cellText}>{item?.unitName || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.amount }]}> 
+        <Text style={styles.cellText}>₹{item?.amount || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.category }]}> 
+        <Text style={styles.cellText}>{item?.categoryName || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.payment }]}> 
+        <Text style={styles.cellText}>{item?.paymentMethodName || 'NIL'}</Text>
+      </View>
+      <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.remarks }]}> 
+        <Text style={styles.cellText}>{item?.remarks || 'NIL'}</Text>
+      </View>
+    </View>
   );
 
   if (loading) {
@@ -970,28 +1009,21 @@ export default function ReportScreen() {
           <>
             {showStartDatePicker && (
               <DateTimePicker
-                value={startDate || new Date()}
+                value={tempStartDate || new Date()}
                 mode="date"
                 display="default"
-                onChange={(event, selectedDate) => {
-                  setShowStartDatePicker(false);
-                  if (selectedDate) {
-                    handleDateSelection(selectedDate);
-                  }
-                }}
+                onChange={handleDateChange}
+                maximumDate={tempEndDate || new Date()}
               />
             )}
             {showEndDatePicker && (
               <DateTimePicker
-                value={endDate || new Date()}
+                value={tempEndDate || new Date()}
                 mode="date"
                 display="default"
-                onChange={(event, selectedDate) => {
-                  setShowEndDatePicker(false);
-                  if (selectedDate) {
-                    handleDateSelection(selectedDate);
-                  }
-                }}
+                onChange={handleDateChange}
+                minimumDate={tempStartDate || new Date(2020, 0, 1)}
+                maximumDate={new Date()}
               />
             )}
           </>
@@ -1002,50 +1034,29 @@ export default function ReportScreen() {
 
         {/* Table Section */}
         <View style={styles.tableContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-            <View>
-              {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
-              {viewType === 'sales' ? (
-                filteredData.length > 0 ? (
-                  <FlatList
-                    data={filteredData}
-                    keyExtractor={(item, index) => `${item.id || index}`}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.listContainer}
-                    scrollEnabled={false}
-                  />
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No sales data available</Text>
-                  </View>
-                )
-              ) : (
-                expenseData.length > 0 ? (
-                  <FlatList
-                    data={expenseData}
-                    keyExtractor={(item, index) => `${item.id || index}`}
-                    renderItem={renderExpenseItem}
-                    contentContainerStyle={styles.listContainer}
-                    scrollEnabled={false}
-                  />
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No expense data available</Text>
-                  </View>
-                )
-              )}
-            </View>
-          </ScrollView>
+          <View style={styles.tableHeaderContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+              <View style={{ width: viewType === 'sales' ? 700 : EXPENSE_TABLE_WIDTH }}>
+                {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
+                <FlatList
+                  data={viewType === 'sales' ? filteredData : expenseData}
+                  keyExtractor={(item, index) => `${item.id || index}`}
+                  renderItem={viewType === 'sales' ? renderItem : renderExpenseItem}
+                  contentContainerStyle={styles.listContainer}
+                  scrollEnabled={false}
+                  ItemSeparatorComponent={() => <View style={styles.rowSeparator} />}
+                />
+              </View>
+            </ScrollView>
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={() => viewType === 'sales' ? fetchReportData() : fetchExpenseData()}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {/* Refresh Button */}
-        <TouchableOpacity 
-          style={styles.refreshButton}
-          onPress={() => viewType === 'sales' ? fetchReportData() : fetchExpenseData()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="refresh" size={20} color="#fff" />
-        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -1073,14 +1084,10 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 8,
     minWidth: width * 0.2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    boxShadow: '0px 1px 2px rgba(0,0,0,0.1)',
   },
   insightLabel: {
-    fontSize: 11,
+    fontSize: 16,
     color: '#666',
     marginBottom: 2,
   },
@@ -1111,7 +1118,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
   },
   filterButtonText: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#666',
     fontWeight: '500',
   },
@@ -1123,11 +1130,10 @@ const styles = StyleSheet.create({
     margin: 15,
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
+  },
+  tableHeaderContainer: {
+    position: 'relative',
   },
   tableHeader: {
     flexDirection: 'row',
@@ -1174,19 +1180,20 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
+    top: 8,
+    right: 8,
     backgroundColor: '#4CAF50',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 3.84,
+    zIndex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -1234,13 +1241,18 @@ const styles = StyleSheet.create({
   pickerContainer: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#f9f9f9',
-    overflow: 'hidden',
+    borderRadius: 4,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+    minHeight: 48,
+    justifyContent: 'center',
+    width: '100%',
   },
   picker: {
-    height: 40,
+    height: 48,
     color: '#333',
+    backgroundColor: '#fff',
+    width: '100%',
   },
   modalOverlay: {
     flex: 1,
@@ -1256,10 +1268,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     padding: 16,
     elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.25)',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1287,33 +1296,27 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   datePickerButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
     borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    marginTop: 4,
   },
   datePickerButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
   datePickerButtonTextContainer: {
-    marginLeft: 12,
+    marginLeft: 8,
     flex: 1,
   },
-  datePickerLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
-  },
   datePickerButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
-    fontWeight: '500',
+  },
+  datePickerLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -1366,11 +1369,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    boxShadow: '0px 1px 2px rgba(0,0,0,0.1)',
     borderLeftWidth: 3,
     borderLeftColor: '#4CAF50',
   },
@@ -1411,5 +1410,10 @@ const styles = StyleSheet.create({
   },
   toggleTextActive: {
     color: '#fff',
+  },
+  rowSeparator: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginHorizontal: 4,
   },
 });

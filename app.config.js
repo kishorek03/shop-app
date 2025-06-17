@@ -18,7 +18,7 @@ export default {
         backgroundColor: "#ffffff"
       },
       edgeToEdgeEnabled: true,
-      package: "com.yourcompany.shopapp"
+      package: "com.iyarkaivanam.shopapp"
     },
     web: {
       bundler: "metro",

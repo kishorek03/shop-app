@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAppFont } from '../_layout';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 
 const { API_BASE_URL } = getEnvConfig();
@@ -26,6 +27,8 @@ const { width } = Dimensions.get('window');
 
 export default function SalesScreen() {
   const { t } = useLanguage();
+  const { fontFamily } = useAppFont();
+  const isTamil = useLanguage().currentLanguage === 'ta';
   const [paymentMode, setPaymentMode] = useState('cash');
   const [products, setProducts] = useState([]);
   const [flavours, setFlavours] = useState([]);
@@ -314,7 +317,7 @@ export default function SalesScreen() {
         return;
       }
 
-      // Get today's date range
+      
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
@@ -381,15 +384,16 @@ export default function SalesScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading data...</Text>
+        <Text style={[styles.loadingText, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('loadingData')}</Text>
       </View>
     );
   }
 
   return (
     <ScrollView 
-      style={styles.container} 
-      contentContainerStyle={styles.scrollContainer}
+      style={{ flex: 1, backgroundColor: '#fff' }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+      keyboardShouldPersistTaps="handled"
     >
       {lastOrder && (
         <Animated.View 
@@ -403,12 +407,26 @@ export default function SalesScreen() {
         >
           <View style={styles.lastOrderHeader}>
             <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.lastOrderTitle}>Last Order</Text>
+            <Text
+              style={[
+                styles.lastOrderTitle,
+                { fontFamily, fontSize: isTamil ? 22 : 16, lineHeight: isTamil ? 34 : 22, paddingVertical: isTamil ? 6 : 2 }
+              ]}
+            >
+              {t('lastOrder')}
+            </Text>
           </View>
           <View style={styles.lastOrderDetails}>
-            <Text style={styles.lastOrderAmount}>₹{lastOrder.totalAmount.toFixed(2)}</Text>
-            <Text style={styles.lastOrderInfo}>
-              {lastOrder.paymentMode === 'cash' ? 'Cash' : 'UPI'} • {new Date(lastOrder.timestamp).toLocaleTimeString()}
+            <Text
+              style={[
+                styles.lastOrderAmount,
+                { fontFamily, fontSize: isTamil ? 22 : 15, lineHeight: isTamil ? 34 : 22, paddingVertical: isTamil ? 6 : 2 }
+              ]}
+            >
+              ₹{lastOrder.totalAmount.toFixed(2)}
+            </Text>
+            <Text style={[styles.lastOrderInfo, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>
+              {lastOrder.paymentMode === 'cash' ? t('cash') : t('upi')} • {new Date(lastOrder.timestamp).toLocaleTimeString()}
             </Text>
           </View>
         </Animated.View>
@@ -416,7 +434,14 @@ export default function SalesScreen() {
       <View style={styles.mainContainer}>
         <View style={styles.summaryContainer}>
           <View style={styles.summaryHeader}>
-            <Text style={styles.summaryTitle}>Today's Summary</Text>
+            <Text
+              style={[
+                styles.summaryTitle,
+                { fontFamily, fontSize: isTamil ? 24 : 16, lineHeight: isTamil ? 36 : 24, paddingVertical: isTamil ? 8 : 4 }
+              ]}
+            >
+              {t('salesSummary')}
+            </Text>
             <TouchableOpacity 
               style={styles.refreshButton}
               onPress={fetchDailySummary}
@@ -431,8 +456,8 @@ export default function SalesScreen() {
                 <Ionicons name="cart-outline" size={24} color="#4CAF50" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Today's Orders</Text>
-                <Text style={styles.summaryValue}>{dailySummary.totalOrders}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('todaysOrders')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{dailySummary.totalOrders}</Text>
               </View>
             </View>
 
@@ -441,8 +466,8 @@ export default function SalesScreen() {
                 <Ionicons name="cash-outline" size={24} color="#4CAF50" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Total Amount</Text>
-                <Text style={styles.summaryValue}>₹{dailySummary.totalAmount.toFixed(2)}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('totalAmount')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalAmount.toFixed(2)}</Text>
               </View>
             </View>
 
@@ -451,8 +476,8 @@ export default function SalesScreen() {
                 <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Cash Sales</Text>
-                <Text style={styles.summaryValue}>₹{dailySummary.cashAmount.toFixed(2)}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('cashSales')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.cashAmount.toFixed(2)}</Text>
               </View>
             </View>
 
@@ -461,186 +486,188 @@ export default function SalesScreen() {
                 <Ionicons name="phone-portrait-outline" size={24} color="#4CAF50" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>UPI Sales</Text>
-                <Text style={styles.summaryValue}>₹{dailySummary.upiAmount.toFixed(2)}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('upiSales')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.upiAmount.toFixed(2)}</Text>
               </View>
             </View>
           </ScrollView>
         </View>
+        <View style={{ backgroundColor: '#fdfdfd', padding: 8 }}>
+          {sales.map((sale, index) => (
+            <View key={index} style={styles.saleContainer}>
+              <View style={styles.saleHeader}>
+                <Text
+                  style={[
+                    styles.saleTitle,
+                    { fontFamily, fontSize: isTamil ? 20 : 16, lineHeight: isTamil ? 32 : 22, paddingVertical: isTamil ? 6 : 2 }
+                  ]}
+                >
+                  {t('item')} {index + 1}
+                </Text>
+                <View style={styles.removeButton}>
+                  {sales.length > 1 && (
+                    <TouchableOpacity 
+                      onPress={() => removeSale(index)}
+                      style={styles.smallButton}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#e53935" />
+                    </TouchableOpacity>
+                  )}
+                  {index === sales.length - 1 && (
+                    <TouchableOpacity 
+                      onPress={handleAddSale}
+                      style={styles.smallButton}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color="#4CAF50" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
 
-        {sales.map((sale, index) => (
-          <Animated.View 
-            key={index} 
-            style={[
-              styles.saleContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ scale: scaleAnim }]
-              }
-            ]}
-          >
-            <View style={styles.saleHeader}>
-              <Text style={styles.saleTitle}>Item {index + 1}</Text>
-              <View style={styles.removeButton}>
-                {sales.length > 1 && (
-                  <TouchableOpacity 
-                    onPress={() => removeSale(index)}
-                    style={styles.smallButton}
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#e53935" />
-                  </TouchableOpacity>
-                )}
-                {index === sales.length - 1 && (
-                  <TouchableOpacity 
-                    onPress={handleAddSale}
-                    style={styles.smallButton}
-                  >
-                    <Ionicons name="add-circle-outline" size={20} color="#4CAF50" />
-                  </TouchableOpacity>
-                )}
+              <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('product')}</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={sale.productId}
+                  onValueChange={(value) => updateSale(index, 'productId', value)}
+                  style={styles.picker}
+                  mode="dropdown"
+                  enabled={products.length > 0}
+                >
+                  <Picker.Item label={t('selectProduct')} value="" color="#888" style={{ fontFamily }} />
+                  {products.map((product) => (
+                    <Picker.Item 
+                      key={`product-${product.id}`}
+                      label={`${product.name} (₹${product.unitPrice})`}
+                      value={product.id.toString()}
+                    />
+                  ))}
+                </Picker>
+              </View>
+
+              {sale.productId && getAvailableFlavoursForProduct(sale.productId).length > 0 && (
+                <>
+                  <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('flavour')}</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={sale.flavourId}
+                      onValueChange={(value) => updateSale(index, 'flavourId', value)}
+                      style={styles.picker}
+                      mode="dropdown"
+                    >
+                      <Picker.Item label={t('selectFlavour')} value="" style={{ fontFamily }} />
+                      {getAvailableFlavoursForProduct(sale.productId).map((flavour) => (
+                        <Picker.Item 
+                          key={`flavour-${flavour.id}`}
+                          label={`${flavour.name} (+₹${flavour.price})`}
+                          value={flavour.id.toString()}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                </>
+              )}
+
+              {sale.productId && addOns && addOns.length > 0 && (
+                <>
+                  <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('addOn')}</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={sale.addOnId}
+                      onValueChange={(value) => updateSale(index, 'addOnId', value)}
+                      style={styles.picker}
+                      mode="dropdown"
+                    >
+                      <Picker.Item label={t('noAddOn')} value="" style={{ fontFamily }} />
+                      {addOns.map((addOn) => (
+                        <Picker.Item 
+                          key={`addon-${addOn.id}`}
+                          label={`${addOn.name} (+₹${addOn.price})`}
+                          value={addOn.id.toString()}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                </>
+              )}
+
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('quantity')}</Text>
+                <TextInput
+                  style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+                  placeholder={t('enterQuantity')}
+                  placeholderTextColor="#888"
+                  keyboardType="numeric"
+                  value={sale.quantity}
+                  onChangeText={(value) => updateSale(index, 'quantity', value)}
+                />
+              </View>
+
+              <View style={styles.parcelContainer}>
+                <Text style={[styles.checkboxLabel, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('parcel')}</Text>
+                <TouchableOpacity 
+                  onPress={() => updateSale(index, 'isParcel', !sale.isParcel)}
+                  style={styles.checkboxContainer}
+                >
+                  <Ionicons
+                    name={sale.isParcel ? 'checkbox-outline' : 'square-outline'}
+                    size={24}
+                    color="#4CAF50"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.parcelContainer}>
+                <Text style={[styles.checkboxLabel, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('customPrice')}</Text>
+                <TouchableOpacity 
+                  onPress={() => updateSale(index, 'isCustomPrice', !sale.isCustomPrice)}
+                  style={styles.checkboxContainer}
+                >
+                  <Ionicons
+                    name={sale.isCustomPrice ? 'checkbox-outline' : 'square-outline'}
+                    size={24}
+                    color="#4CAF50"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('salePrice')}</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    sale.isCustomPrice && styles.priceInput,
+                    { fontFamily, lineHeight: 22, paddingVertical: 6 }
+                  ]}
+                  placeholder={t('enterPrice')}
+                  placeholderTextColor="#888"
+                  keyboardType="numeric"
+                  editable={sale.isCustomPrice}
+                  value={sale.salePrice}
+                  onChangeText={(value) => updateSale(index, 'salePrice', value)}
+                />
               </View>
             </View>
-
-            <Text style={styles.label}>Product</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={sale.productId}
-                onValueChange={(value) => updateSale(index, 'productId', value)}
-                style={styles.picker}
-                dropdownIconColor="#4CAF50"
-              >
-                <Picker.Item label="Select Product" value="" />
-                {products.map((product) => (
-                  <Picker.Item 
-                    key={`product-${product.id}`}
-                    label={`${product.name} (₹${product.unitPrice})`}
-                    value={product.id.toString()}
-                  />
-                ))}
-              </Picker>
-            </View>
-
-            {sale.productId && getAvailableFlavoursForProduct(sale.productId).length > 0 && (
-              <>
-                <Text style={styles.label}>Flavour</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={sale.flavourId}
-                    onValueChange={(value) => updateSale(index, 'flavourId', value)}
-                    style={styles.picker}
-                    dropdownIconColor="#4CAF50"
-                  >
-                    <Picker.Item label="Select Flavour" value="" />
-                    {getAvailableFlavoursForProduct(sale.productId).map((flavour) => (
-                      <Picker.Item 
-                        key={`flavour-${flavour.id}`}
-                        label={`${flavour.name} (+₹${flavour.price})`}
-                        value={flavour.id.toString()}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </>
-            )}
-
-            {sale.productId && addOns && addOns.length > 0 && (
-              <>
-                <Text style={styles.label}>Add-On</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={sale.addOnId}
-                    onValueChange={(value) => updateSale(index, 'addOnId', value)}
-                    style={styles.picker}
-                    dropdownIconColor="#4CAF50"
-                  >
-                    <Picker.Item label="No Add-On" value="" />
-                    {addOns.map((addOn) => (
-                      <Picker.Item 
-                        key={`addon-${addOn.id}`}
-                        label={`${addOn.name} (+₹${addOn.price})`}
-                        value={addOn.id.toString()}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </>
-            )}
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Quantity</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter quantity"
-                placeholderTextColor="#888"
-                keyboardType="numeric"
-                value={sale.quantity}
-                onChangeText={(value) => updateSale(index, 'quantity', value)}
-              />
-            </View>
-
-            <View style={styles.parcelContainer}>
-              <Text style={styles.checkboxLabel}>Parcel</Text>
-              <TouchableOpacity 
-                onPress={() => updateSale(index, 'isParcel', !sale.isParcel)}
-                style={styles.checkboxContainer}
-              >
-                <Ionicons
-                  name={sale.isParcel ? 'checkbox-outline' : 'square-outline'}
-                  size={24}
-                  color="#4CAF50"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.parcelContainer}>
-              <Text style={styles.checkboxLabel}>Custom Price</Text>
-              <TouchableOpacity 
-                onPress={() => updateSale(index, 'isCustomPrice', !sale.isCustomPrice)}
-                style={styles.checkboxContainer}
-              >
-                <Ionicons
-                  name={sale.isCustomPrice ? 'checkbox-outline' : 'square-outline'}
-                  size={24}
-                  color="#4CAF50"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Sale Price</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  sale.isCustomPrice && styles.priceInput
-                ]}
-                placeholder="Enter price"
-                placeholderTextColor="#888"
-                keyboardType="numeric"
-                editable={sale.isCustomPrice}
-                value={sale.salePrice}
-                onChangeText={(value) => updateSale(index, 'salePrice', value)}
-              />
-            </View>
-          </Animated.View>
-        ))}
+          
+          ))}
+        </View>
 
         <View style={styles.summaryContainer}>
           <View style={styles.totalContainer}>
-            <Text style={styles.totalLabel}>Total Amount:</Text>
-            <Text style={styles.totalAmount}>₹{calculateTotal()}</Text>
+            <Text style={[styles.totalLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('totalAmount')}:</Text>
+            <Text style={[styles.totalAmount, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{calculateTotal()}</Text>
           </View>
 
           <View style={styles.paymentContainer}>
-            <Text style={styles.label}>Payment Mode</Text>
+            <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('paymentMode')}</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={paymentMode}
                 onValueChange={setPaymentMode}
                 style={styles.picker}
-                dropdownIconColor="#4CAF50"
+                mode="dropdown"
               >
-                <Picker.Item label="Cash" value="cash" />
-                <Picker.Item label="UPI" value="upi" />
+                <Picker.Item label={t('cash')} value="cash" style={{ fontFamily }} />
+                <Picker.Item label={t('upi')} value="upi" style={{ fontFamily }} />
               </Picker>
             </View>
           </View>
@@ -658,7 +685,7 @@ export default function SalesScreen() {
             ) : (
               <View style={styles.submitButtonInner}>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                <Text style={styles.submitButtonText}>Submit Order</Text>
+                <Text style={[styles.submitButtonText, { fontFamily, lineHeight: 22, paddingVertical: 2 }]}>{t('submitOrder')}</Text>
               </View>
             )}
           </View>
@@ -671,15 +698,17 @@ export default function SalesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    backgroundColor: '#fff',
+    minHeight: 300,
   },
   mainContainer: {
     flex: 1,
   },
   scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
     padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 80 : 32,
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -690,10 +719,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   title: {
     fontSize: 20,
@@ -706,10 +732,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -751,11 +774,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    minHeight: 100,
+    borderColor: '#4CAF50',
+    borderWidth: 1
   },
   saleHeader: {
     flexDirection: 'row',
@@ -785,9 +806,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginBottom: 8,
     backgroundColor: '#fff',
+    minHeight: 48,
+    justifyContent: 'center',
+    width: '100%',
   },
   picker: {
-    height: 50,
+    height: 48,
+    color: '#333',
+    backgroundColor: '#fff',
     width: '100%',
   },
   input: {
@@ -798,6 +824,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     backgroundColor: '#fff',
     height: 40,
+    width: '100%',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -829,10 +856,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
     marginBottom: Platform.OS === 'android' ? 16 : 0,
   },
   submitButtonText: {
@@ -856,10 +880,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
   },
   lastOrderHeader: {
     flexDirection: 'row',
@@ -904,10 +925,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
     elevation: 2,
   },
   totalContainer: {
@@ -962,10 +979,6 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 8,
     minWidth: width * 0.2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
     elevation: 1,
     flexDirection: 'row',
     alignItems: 'center',
