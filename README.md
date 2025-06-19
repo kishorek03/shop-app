@@ -12,25 +12,6 @@ A robust transaction management application built with React Native and Expo. Th
 
 </div>
 
-## 📱 Preview
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="assets/images/preview.png" alt="App Preview" width="250"/>
-        <br/>
-        <em>Main Dashboard</em>
-      </td>
-      <td align="center">
-        <img src="assets/images/sales.png" alt="Sales View" width="250"/>
-        <br/>
-        <em>Sales Analytics</em>
-      </td>
-    </tr>
-  </table>
-</div>
-
 ## 🚀 Features
 
 - ✨ Clean and responsive user interface
