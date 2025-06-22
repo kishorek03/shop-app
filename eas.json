@@ -8,23 +8,25 @@
       "developmentClient": true,
       "distribution": "internal"
     },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "qa": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
+      "distribution": "internal",
       "env": {
         "APP_ENV": "qa"
-      },
-      "channel": "qa"
+      }
     },
-    "production": {
-      "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "APP_ENV": "production"
-      },
-      "channel": "production"
-    }
+    "production": {}
+  },
+  "submit": {
+    "production": {}
   }
 } 

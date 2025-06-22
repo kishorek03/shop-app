@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -95,7 +96,7 @@ export default function ReportScreen() {
   useEffect(() => {
     const loadMasterData = async () => {
       try {
-        const { products: fetchedProducts, flavours: fetchedFlavours, addOns: fetchedAddOns, error } = await fetchMasterData();
+        const { products: fetchedProducts, flavours: fetchedFlavours, addOns: fetchedAddOns, paymentMethods: fetchedPaymentMethods, error } = await fetchMasterData();
         
         if (error) {
           throw new Error(error);
@@ -104,6 +105,8 @@ export default function ReportScreen() {
         setProducts(fetchedProducts);
         setFlavours(fetchedFlavours);
         setAddOns(fetchedAddOns);
+        // Note: Payment methods are not needed for filtering in report screen
+        // as they come from the API responses dynamically
       } catch (error) {
         console.error('Error fetching master data:', error);
         Alert.alert('Error', 'Failed to load master data');
@@ -131,6 +134,17 @@ export default function ReportScreen() {
       setSelectedFlavourId('all');
     }
   }, [selectedProductId, products, flavours]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Reload data when the screen is focused
+      if (viewType === 'sales') {
+        fetchReportData();
+      } else {
+        fetchExpenseData();
+      }
+    }, [viewType, filterPeriod, startDate, endDate])
+  );
 
   const checkAccess = async () => {
     try {
@@ -316,7 +330,7 @@ export default function ReportScreen() {
       }
 
       const salesData = await salesResponse.json();
-      setReportData(salesData || []);
+      setReportData((salesData && Array.isArray(salesData.data)) ? salesData.data : []);
 
       const summaryResponse = await fetch(`${API_BASE_URL}/orders/summary?start=${queryParams.get('startDate')}&end=${queryParams.get('endDate')}`, {
         headers: {
@@ -1240,19 +1254,23 @@ const styles = StyleSheet.create({
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#4CAF50',
     borderRadius: 4,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 48,
+    minHeight: 54,
     justifyContent: 'center',
     width: '100%',
+    paddingVertical: 0,
   },
   picker: {
-    height: 48,
+    height: 50,
     color: '#333',
     backgroundColor: '#fff',
     width: '100%',
+    fontSize: 16,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
   },
   modalOverlay: {
     flex: 1,

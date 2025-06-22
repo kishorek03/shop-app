@@ -69,6 +69,11 @@ export const languages = {
     username: 'Username',
     password: 'Password',
     login: 'Login',
+    totalSales: 'Total Sales',
+    totalExpense: 'Total Expense',
+    netAmount: 'Net Amount',
+    salesBreakdown: 'Sales Breakdown',
+    expenseBreakdown: 'Expense Breakdown',
   },
   ta: {
     settings: 'அமைப்புகள்',
@@ -135,6 +140,11 @@ export const languages = {
     username: 'பயனர்பெயர்',
     password: 'கடவுச்சொல்',
     login: 'உள்நுழை',
+    totalSales: 'மொத்த விற்பனை',
+    totalExpense: 'மொத்த செலவு',
+    netAmount: 'நிகரத் தொகை',
+    salesBreakdown: 'விற்பனை விவரம்',
+    expenseBreakdown: 'செலவு விவரம்',
   }
 };
 
