@@ -10,7 +10,7 @@ export const fetchMasterData = async () => {
       throw new Error('No access token found');
     }
 
-    const [productsRes, flavoursRes, addOnsRes] = await Promise.all([
+    const [productsRes, flavoursRes, addOnsRes, paymentMethodsRes] = await Promise.all([
       fetch(`${API_BASE_URL}/products`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -28,13 +28,20 @@ export const fetchMasterData = async () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+      }),
+      fetch(`${API_BASE_URL}/payment-methods`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       })
     ]);
 
-    const [productsData, flavoursData, addOnsData] = await Promise.all([
+    const [productsData, flavoursData, addOnsData, paymentMethodsData] = await Promise.all([
       productsRes.json(),
       flavoursRes.json(),
-      addOnsRes.json()
+      addOnsRes.json(),
+      paymentMethodsRes.json()
     ]);
 
     const products = productsData.status === 'success' 
@@ -49,10 +56,15 @@ export const fetchMasterData = async () => {
       ? addOnsData.data.filter(a => a && a.id)
       : [];
 
+    const paymentMethods = paymentMethodsData.status === 'success'
+      ? paymentMethodsData.data.filter(pm => pm && pm.id)
+      : [];
+
     return {
       products,
       flavours,
       addOns,
+      paymentMethods,
       error: null
     };
   } catch (error) {
@@ -61,6 +73,7 @@ export const fetchMasterData = async () => {
       products: [],
       flavours: [],
       addOns: [],
+      paymentMethods: [],
       error: error.message
     };
   }

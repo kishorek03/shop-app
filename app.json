@@ -1,13 +1,19 @@
 {
   "expo": {
-    "name": "shop-app",
+    "name": "Shop App",
     "slug": "shop-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/appicon.png",
-    "scheme": "shopapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true
     },
@@ -16,27 +22,16 @@
         "foregroundImage": "./assets/images/appicon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.iyarkaivanam.shopapp",
+      "versionCode": 1
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true
+    "extra": {
+      "eas": {
+        "projectId": "656cb6dd-c26b-4d00-9aeb-b860a914a13f"
+      }
     }
   }
 }

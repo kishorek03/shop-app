@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
+import NotificationService from '../../services/NotificationService';
 import { useAppFont } from '../_layout';
 
 const { API_BASE_URL } = getEnvConfig();
@@ -30,7 +31,8 @@ export default function ExpenseScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
-  const [paymentMode, setPaymentMode] = useState('cash');
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [paymentMode, setPaymentMode] = useState('');
   const [lastExpense, setLastExpense] = useState(null);
   const [expense, setExpense] = useState({
     item: '',
@@ -58,6 +60,7 @@ export default function ExpenseScreen() {
 
     fetchCategories();
     fetchUnits();
+    fetchPaymentMethods();
   }, []);
 
   const fetchUnits = async () => {
@@ -172,6 +175,49 @@ export default function ExpenseScreen() {
     }
   };
 
+  const fetchPaymentMethods = async () => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        console.error('No access token found');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payment-methods`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch payment methods');
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'success' && Array.isArray(data.data)) {
+        setPaymentMethods(data.data);
+        // Set default payment mode to the first available method
+        if (data.data.length > 0 && !paymentMode) {
+          setPaymentMode(data.data[0].id.toString());
+        }
+      } else {
+        console.error('Invalid payment methods data format:', data);
+      }
+    } catch (error) {
+      console.error('Error fetching payment methods:', error);
+      // Fallback to default payment methods if API fails
+      setPaymentMethods([
+        { id: 1, name: 'CASH' },
+        { id: 2, name: 'UPI' }
+      ]);
+      if (!paymentMode) {
+        setPaymentMode('1');
+      }
+    }
+  };
+
   const showSuccessMessage = () => {
     setShowSuccess(true);
     Animated.sequence([
@@ -199,6 +245,11 @@ export default function ExpenseScreen() {
       return;
     }
 
+    if (!paymentMode) {
+      Alert.alert('Validation Error', 'Please select a payment method.');
+      return;
+    }
+
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
@@ -207,9 +258,12 @@ export default function ExpenseScreen() {
         return;
       }
 
-      // Normalize payment method
-      const normalizedPaymentMode = paymentMode.trim().toUpperCase();
-      const paymentMethodId = normalizedPaymentMode === 'CASH' ? 1 : 2;
+      // Get the selected payment method
+      const selectedPaymentMethod = paymentMethods.find(method => method.id.toString() === paymentMode);
+      if (!selectedPaymentMethod) {
+        Alert.alert('Error', 'Invalid payment method selected.');
+        return;
+      }
 
       const expenseData = {
         item: expense.item,
@@ -217,7 +271,7 @@ export default function ExpenseScreen() {
         amount: parseFloat(expense.amount),
         unitId: Number(expense.unitId), 
         categoryId: parseInt(expense.categoryId),
-        paymentMethodId: paymentMethodId,
+        paymentMethodId: selectedPaymentMethod.id,
         remarks: expense.remarks || ''
       };
 
@@ -252,7 +306,18 @@ export default function ExpenseScreen() {
           paymentMethodId: 1,
           remarks: ''
         });
-        setPaymentMode('cash');
+        // Reset to first payment method
+        if (paymentMethods.length > 0) {
+          setPaymentMode(paymentMethods[0].id.toString());
+        }
+
+        // Send expense notification
+        NotificationService.sendExpenseNotification({
+          id: json.data?.id || 'New',
+          amount: expenseData.amount,
+          item: expenseData.item,
+          category: categories.find(cat => cat.id.toString() === expenseData.categoryId.toString())?.categoryName || 'Unknown'
+        });
       } else {
         throw new Error(json.message || 'Failed to record expense');
       }
@@ -521,8 +586,14 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#4CAF50',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 6,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
   input: {
     borderWidth: 1,
@@ -536,23 +607,23 @@ const styles = StyleSheet.create({
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#4CAF50',
     borderRadius: 4,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 48,
+    minHeight: 56,
     justifyContent: 'center',
     width: '100%',
-    alignItems: 'stretch',
+    paddingVertical: 0,
   },
-  
   picker: {
-    height: 48,
+    height: 50,
     color: '#333',
     backgroundColor: '#fff',
     width: '100%',
-    paddingHorizontal: 8,
-    fontSize: 12,
+    fontSize: 16,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
   },
   paymentModeContainer: {
     flexDirection: 'row',

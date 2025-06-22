@@ -41,7 +41,7 @@ export default {
       typedRoutes: true
     },
     extra: {
-      environment: process.env.APP_ENV || 'development',
+      environment: 'production',
       eas: {
         projectId: "656cb6dd-c26b-4d00-9aeb-b860a914a13f"
       }

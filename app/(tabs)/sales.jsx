@@ -8,6 +8,8 @@ import {
   Alert,
   Animated,
   Dimensions,
+  FlatList,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,7 @@ import {
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
+import NotificationService from '../../services/NotificationService';
 import { useAppFont } from '../_layout';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 
@@ -25,17 +28,36 @@ const { API_BASE_URL } = getEnvConfig();
 
 const { width } = Dimensions.get('window');
 
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).format(date);
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
+  }
+};
+
 export default function SalesScreen() {
   const { t } = useLanguage();
   const { fontFamily } = useAppFont();
   const isTamil = useLanguage().currentLanguage === 'ta';
-  const [paymentMode, setPaymentMode] = useState('cash');
+  const [paymentMode, setPaymentMode] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [products, setProducts] = useState([]);
   const [flavours, setFlavours] = useState([]);
   const [addOns, setAddOns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.95));
+  const [refreshAnim] = useState(new Animated.Value(0));
   const [lastOrder, setLastOrder] = useState(null);
   const [sales, setSales] = useState([{ 
     productId: '', 
@@ -48,11 +70,16 @@ export default function SalesScreen() {
   }]);
   const router = useRouter();
   const [dailySummary, setDailySummary] = useState({
-    totalOrders: 0,
-    totalAmount: 0,
-    cashAmount: 0,
-    upiAmount: 0
+    totalSales: 0,
+    totalExpense: 0,
+    netAmount: 0,
+    paymentMethodSales: {},
+    salesBreakdown: [],
+    expenseBreakdown: [],
   });
+
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [modalContent, setModalContent] = useState({ title: '', data: [], type: '' });
 
   useEffect(() => {
     Animated.parallel([
@@ -74,7 +101,7 @@ export default function SalesScreen() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const { products: fetchedProducts, flavours: fetchedFlavours, addOns: fetchedAddOns, error } = await fetchMasterData();
+      const { products: fetchedProducts, flavours: fetchedFlavours, addOns: fetchedAddOns, paymentMethods: fetchedPaymentMethods, error } = await fetchMasterData();
       
       if (error) {
         Alert.alert('Error', 'Failed to load data. Please check your connection.');
@@ -84,6 +111,12 @@ export default function SalesScreen() {
       setProducts(fetchedProducts);
       setFlavours(fetchedFlavours);
       setAddOns(fetchedAddOns);
+      setPaymentMethods(fetchedPaymentMethods);
+
+      // Set default payment mode to the first available method
+      if (fetchedPaymentMethods.length > 0 && !paymentMode) {
+        setPaymentMode(fetchedPaymentMethods[0].id.toString());
+      }
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -123,33 +156,6 @@ export default function SalesScreen() {
     }
   };
 
-  const calculateAmount = (sale, product) => {
-    if (!product || !sale.quantity) return '0';
-    
-    const quantity = parseInt(sale.quantity);
-    const basePrice = parseFloat(product.unitPrice) || 0;
-    const parcelCharge = sale.isParcel ? (parseFloat(product.parcelPrice) || 0) : 0;
-    
-    let flavourPrice = 0;
-    if (sale.flavourId) {
-      const selectedFlavour = flavours.find(f => f.id === parseInt(sale.flavourId));
-      if (selectedFlavour) {
-        flavourPrice = parseFloat(selectedFlavour.price);
-      }
-    }
-
-    let addOnPrice = 0;
-    if (sale.addOnId) {
-      const selectedAddOn = addOns.find(a => a.id === parseInt(sale.addOnId));
-      if (selectedAddOn) {
-        addOnPrice = parseFloat(selectedAddOn.price);
-      }
-    }
-
-    const pricePerUnit = basePrice + flavourPrice + addOnPrice + parcelCharge;
-    const totalAmount = quantity * pricePerUnit;
-    return totalAmount.toFixed(2);
-  };
 
   const updateSale = async (index, field, value) => {
     const updated = [...sales];
@@ -221,6 +227,11 @@ export default function SalesScreen() {
       return;
     }
 
+    if (!paymentMode) {
+      Alert.alert('Validation Error', 'Please select a payment method.');
+      return;
+    }
+
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
@@ -230,12 +241,15 @@ export default function SalesScreen() {
         return;
       }
 
-      // Normalize payment method
-      const normalizedPaymentMode = paymentMode.trim().toUpperCase();
-      const paymentMethodId = normalizedPaymentMode === 'CASH' ? 1 : 2;
+      // Get the selected payment method
+      const selectedPaymentMethod = paymentMethods.find(method => method.id.toString() === paymentMode);
+      if (!selectedPaymentMethod) {
+        Alert.alert('Error', 'Invalid payment method selected.');
+        return;
+      }
 
       const orderData = {
-        paymentMethodId: paymentMethodId,
+        paymentMethodId: selectedPaymentMethod.id,
         totalAmount: parseFloat(calculateTotal()),
         sales: sales.map(sale => {
           const quantity = parseInt(sale.quantity);
@@ -268,10 +282,11 @@ export default function SalesScreen() {
       const json = await response.json();
       
       if (response.status === 201 && json.status === 'success') {
-        // Store last order details with normalized payment method
+        fetchDashboardSummary();
+        // Store last order details with payment method name
         setLastOrder({
           totalAmount: orderData.totalAmount,
-          paymentMode: normalizedPaymentMode,
+          paymentMode: selectedPaymentMethod.name,
           timestamp: new Date().toISOString()
         });
         
@@ -285,10 +300,20 @@ export default function SalesScreen() {
           addOnId: '',
           isCustomPrice: false
         }]);
-        setPaymentMode('cash');
+        // Reset to first payment method
+        if (paymentMethods.length > 0) {
+          setPaymentMode(paymentMethods[0].id.toString());
+        }
         
         // Refresh daily summary after successful order
-        fetchDailySummary();
+        fetchDashboardSummary();
+
+        // Send order notification
+        NotificationService.sendOrderNotification({
+          id: json.data?.id || 'New',
+          totalAmount: orderData.totalAmount,
+          paymentMethod: selectedPaymentMethod.name
+        });
       } else {
         Alert.alert('Error', json.message || 'Failed to submit order');
       }
@@ -310,75 +335,138 @@ export default function SalesScreen() {
     console.log('Flavours:', flavours);
   }, [products, flavours]);
 
-  const fetchDailySummary = async () => {
+  const fetchDashboardSummary = async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        return;
-      }
+      if (!token) return;
 
-      
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-      
-      // Convert to UTC while preserving the local date
-      const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000);
-      const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
 
-      const response = await fetch(
-        `${API_BASE_URL}/orders/summary?start=${startUTC.toISOString()}&end=${endUTC.toISOString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000).toISOString();
+      const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000).toISOString();
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success' && Array.isArray(data.data)) {
-          // Calculate totals
-          const summary = data.data.reduce((acc, order) => {
-            acc.totalOrders++;
-            acc.totalAmount += order.totalAmount;
-            
-            // Normalize payment method to handle case sensitivity and whitespace
-            const paymentMethod = (order.paymentMethod || '').trim().toUpperCase();
-            
-            if (paymentMethod === 'CASH') {
-              acc.cashAmount += order.totalAmount;
-            } else if (paymentMethod === 'UPI') {
-              acc.upiAmount += order.totalAmount;
-            } else {
-              // Handle any other payment methods or unknown cases
-              console.log('Unknown payment method:', order.paymentMethod);
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
+      const [salesSummaryResponse, salesDetailsResponse, expensesResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/orders/summary?start=${startUTC}&end=${endUTC}`, { headers }),
+        fetch(`${API_BASE_URL}/sales/fetch?startDate=${startUTC}&endDate=${endUTC}`, { headers }),
+        fetch(`${API_BASE_URL}/expenses?start=${startUTC}&end=${endUTC}`, { headers })
+      ]);
+
+      let totalSales = 0;
+      const paymentMethodSales = {};
+      let salesBreakdown = [];
+
+      if (salesSummaryResponse.ok && salesDetailsResponse.ok) {
+        const salesSummaryData = await salesSummaryResponse.json();
+        const salesDetailsData = await salesDetailsResponse.json();
+
+        if (salesSummaryData.status === 'success' && Array.isArray(salesSummaryData.data)) {
+          // Create a map of orders from the summary
+          const ordersMap = new Map(salesSummaryData.data.map(order => [order.id, { ...order, sales: [] }]));
+
+          // Group detailed sales under their parent order
+          if (salesDetailsData && Array.isArray(salesDetailsData.data)) {
+            salesDetailsData.data.forEach(sale => {
+              if (ordersMap.has(sale.orderId)) {
+                const order = ordersMap.get(sale.orderId);
+                
+                // Find product and flavour names from component state
+                const product = products.find(p => p.id === sale.productId);
+                const flavour = flavours.find(f => f.id === sale.flavourId);
+
+                order.sales.push({
+                  ...sale,
+                  productName: product ? product.name : 'Product',
+                  flavourName: flavour ? flavour.name : null
+                });
+                
+                // If the order from summary doesn't have a date, use the one from the sales item
+                if (!order.createdAt && sale.createdAt) {
+                  order.createdAt = sale.createdAt;
+                }
+              }
+            });
+          }
+          
+          salesBreakdown = Array.from(ordersMap.values());
+
+          // Calculate totals from the summary data
+          salesBreakdown.forEach(order => {
+            totalSales += order.totalAmount;
+            const paymentMethod = (order.paymentMethod || 'Unknown').trim().toUpperCase();
+            if (!paymentMethodSales[paymentMethod]) {
+              paymentMethodSales[paymentMethod] = 0;
             }
-            return acc;
-          }, {
-            totalOrders: 0,
-            totalAmount: 0,
-            cashAmount: 0,
-            upiAmount: 0
+            paymentMethodSales[paymentMethod] += order.totalAmount;
           });
-
-          // Log the summary for debugging
-          console.log('Daily Summary:', summary);
-          setDailySummary(summary);
         }
       }
+
+      let totalExpense = 0;
+      let expenseBreakdown = [];
+      if (expensesResponse.ok) {
+        const expenseData = await expensesResponse.json();
+        if (expenseData.status === 'success' && Array.isArray(expenseData.data)) {
+          expenseBreakdown = expenseData.data;
+          totalExpense = expenseData.data.reduce((sum, expense) => sum + expense.amount, 0);
+        }
+      }
+
+      setDailySummary({
+        totalSales,
+        totalExpense,
+        netAmount: totalSales - totalExpense,
+        paymentMethodSales,
+        salesBreakdown,
+        expenseBreakdown,
+      });
+
     } catch (error) {
-      console.error('Error fetching daily summary:', error);
+      console.error('Error fetching dashboard summary:', error);
     }
   };
 
   useEffect(() => {
-    fetchDailySummary();
-    // Refresh summary every minute
-    const interval = setInterval(fetchDailySummary, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    // Only run this when master data is available to prevent race conditions.
+    if (products.length > 0 && paymentMethods.length > 0) {
+      fetchDashboardSummary();
+      const interval = setInterval(fetchDashboardSummary, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [products, paymentMethods]);
+
+  const handleRefresh = () => {
+    refreshAnim.setValue(0);
+    Animated.timing(refreshAnim, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }).start();
+    fetchDashboardSummary();
+  };
+
+  const handleShowBreakdown = (type) => {
+    if (type === 'sales') {
+      setModalContent({
+        title: t('salesBreakdown'),
+        data: dailySummary.salesBreakdown,
+        type: 'sales',
+      });
+    } else {
+      setModalContent({
+        title: t('expenseBreakdown'),
+        data: dailySummary.expenseBreakdown,
+        type: 'expenses',
+      });
+    }
+    setModalVisible(true);
+  };
 
   if (loading && (products.length === 0 || flavours.length === 0 || addOns.length === 0)) {
     return (
@@ -426,7 +514,7 @@ export default function SalesScreen() {
               ₹{lastOrder.totalAmount.toFixed(2)}
             </Text>
             <Text style={[styles.lastOrderInfo, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>
-              {lastOrder.paymentMode === 'cash' ? t('cash') : t('upi')} • {new Date(lastOrder.timestamp).toLocaleTimeString()}
+              {lastOrder.paymentMode} • {formatDate(lastOrder.timestamp)}
             </Text>
           </View>
         </Animated.View>
@@ -444,50 +532,71 @@ export default function SalesScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.refreshButton}
-              onPress={fetchDailySummary}
+              onPress={handleRefresh}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh" size={20} color="#4CAF50" />
+              <Animated.View
+                style={{
+                  transform: [{
+                    rotate: refreshAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '360deg'],
+                    })
+                  }]
+                }}
+              >
+                <Ionicons name="refresh" size={20} color="#4CAF50" />
+              </Animated.View>
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name="cart-outline" size={24} color="#4CAF50" />
+            <TouchableOpacity onPress={() => handleShowBreakdown('sales')}>
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="trending-up-outline" size={24} color="#4CAF50" />
+                </View>
+                <View style={styles.summaryContent}>
+                  <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('totalSales')}</Text>
+                  <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalSales.toFixed(2)}</Text>
+                </View>
               </View>
-              <View style={styles.summaryContent}>
-                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('todaysOrders')}</Text>
-                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{dailySummary.totalOrders}</Text>
+            </TouchableOpacity>
+
+            {Object.entries(dailySummary.paymentMethodSales).map(([method, amount]) => (
+              <View key={method} style={styles.summaryCard}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons 
+                    name={method === 'CASH' ? 'cash-outline' : 'phone-portrait-outline'} 
+                    size={24} 
+                    color="#4CAF50" 
+                  />
+                </View>
+                <View style={styles.summaryContent}>
+                  <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t(method.toLowerCase())}</Text>
+                  <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{amount.toFixed(2)}</Text>
+                </View>
               </View>
-            </View>
+            ))}
+
+            <TouchableOpacity onPress={() => handleShowBreakdown('expenses')}>
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="trending-down-outline" size={24} color="#e53935" />
+                </View>
+                <View style={styles.summaryContent}>
+                  <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#e53935' }]}>{t('totalExpense')}</Text>
+                  <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalExpense.toFixed(2)}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryIconContainer}>
-                <Ionicons name="cash-outline" size={24} color="#4CAF50" />
+                <Ionicons name="wallet-outline" size={24} color="#1E88E5" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('totalAmount')}</Text>
-                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalAmount.toFixed(2)}</Text>
-              </View>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
-              </View>
-              <View style={styles.summaryContent}>
-                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('cashSales')}</Text>
-                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.cashAmount.toFixed(2)}</Text>
-              </View>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name="phone-portrait-outline" size={24} color="#4CAF50" />
-              </View>
-              <View style={styles.summaryContent}>
-                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>{t('upiSales')}</Text>
-                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.upiAmount.toFixed(2)}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#1E88E5' }]}>{t('netAmount')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.netAmount.toFixed(2)}</Text>
               </View>
             </View>
           </ScrollView>
@@ -524,7 +633,7 @@ export default function SalesScreen() {
                 </View>
               </View>
 
-              <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('product')}</Text>
+              <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 1 }]}>{t('product')}</Text>
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={sale.productId}
@@ -666,8 +775,13 @@ export default function SalesScreen() {
                 style={styles.picker}
                 mode="dropdown"
               >
-                <Picker.Item label={t('cash')} value="cash" style={{ fontFamily }} />
-                <Picker.Item label={t('upi')} value="upi" style={{ fontFamily }} />
+                {paymentMethods.map((method) => (
+                  <Picker.Item 
+                    key={method.id}
+                    label={method.name}
+                    value={method.id.toString()}
+                  />
+                ))}
               </Picker>
             </View>
           </View>
@@ -691,6 +805,62 @@ export default function SalesScreen() {
           </View>
         </TouchableOpacity>
       </View>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isModalVisible}
+        onRequestClose={() => {
+          setModalVisible(!isModalVisible);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <FlatList
+              data={modalContent.data}
+              keyExtractor={(item, index) => (item.id || item.expenseId || index).toString()}
+              style={{ width: '100%' }}
+              renderItem={({ item }) =>
+                modalContent.type === 'sales' ? (
+                  <View style={styles.orderCard}>
+                    <View style={styles.orderHeader}>
+                      <Text style={styles.orderTitle}>Order #{item.id}</Text>
+                      <Text style={styles.orderDate}>{formatDate(item.createdAt)}</Text>
+                    </View>
+                    {(item.sales || []).map((sale, index) => (
+                      <View key={index} style={styles.saleItem}>
+                        <Text style={styles.saleItemText}>
+                          {sale.quantity}x {sale.productName}
+                          {sale.flavourName ? ` (${sale.flavourName})` : ''}
+                          {sale.parcel ? ` (${t('parcel')})` : ''}
+                        </Text>
+                        <Text style={styles.saleItemPrice}>₹{sale.salePrice.toFixed(2)}</Text>
+                      </View>
+                    ))}
+                    <View style={styles.orderFooter}>
+                      <Text style={styles.orderPayment}>{t(item.paymentMethod.toLowerCase())}</Text>
+                      <Text style={styles.orderTotal}>Total: ₹{item.totalAmount.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.breakdownItem}>
+                    <Text style={styles.breakdownText}>
+                      {item.item} - {t(item.paymentMethodName.toLowerCase())}
+                    </Text>
+                    <Text style={styles.breakdownAmount}>₹{item.amount.toFixed(2)}</Text>
+                  </View>
+                )
+              }
+            />
+            <TouchableOpacity
+              style={[styles.button, styles.buttonClose]}
+              onPress={() => setModalVisible(!isModalVisible)}
+            >
+              <Text style={styles.textStyle}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -796,25 +966,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   label: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 6,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
+   
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#4CAF50',
     borderRadius: 4,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 48,
+    minHeight: 56,
     justifyContent: 'center',
     width: '100%',
+    paddingVertical: 0,
   },
   picker: {
-    height: 48,
+    height: 50,
     color: '#333',
     backgroundColor: '#fff',
     width: '100%',
+    fontSize: 16,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
   },
   input: {
     borderWidth: 1,
@@ -836,7 +1017,12 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: '#2E7D32',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   addButton: {
     backgroundColor: '#4CAF50',
@@ -1023,5 +1209,132 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: '#2E7D32',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: '95%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    marginBottom: 15,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: 'bold',
+    width: '100%',
+  },
+  button: {
+    borderRadius: 10,
+    padding: 10,
+    elevation: 2,
+    marginTop: 15,
+  },
+  buttonClose: {
+    backgroundColor: '#2196F3',
+    alignSelf: 'center',
+    paddingHorizontal: 30,
+  },
+  textStyle: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  breakdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    width: '100%',
+  },
+  breakdownText: {
+    fontSize: 16,
+  },
+  breakdownAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  orderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 15,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  orderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  orderDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  saleItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  saleItemText: {
+    fontSize: 14,
+    color: '#555',
+    flex: 1,
+  },
+  saleItemPrice: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  orderPayment: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  orderTotal: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E88E5',
   },
 });

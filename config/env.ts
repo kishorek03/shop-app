@@ -1,11 +1,9 @@
-import Constants from 'expo-constants';
-
 // Define the environment types
 type Environment = 'development' | 'qa' | 'production';
 
-// Get the current environment from app.config.js or default to development
+// Get the current environment from app.config.js or default to production
 const getEnvironment = (): Environment => {
-  const env = Constants.expoConfig?.extra?.environment || 'development';
+  const env = 'production';
   return env as Environment;
 };
 
@@ -18,7 +16,7 @@ const ENV = {
     API_BASE_URL: 'https://transaction-manager.fly.dev/api', // Replace with your QA API URL
   },
   production: {
-    API_BASE_URL: 'https://api.yourdomain.com/api', // Replace with your production API URL
+    API_BASE_URL: 'http://143.244.134.163:8080/api', // Replace with your production API URL
   },
 };
 

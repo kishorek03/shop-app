@@ -51,6 +51,14 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
+      
+      // Log the API configuration
+      console.log('=== LOGIN REQUEST DEBUG ===');
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('Full login URL:', `${API_BASE_URL}/auth/login`);
+      console.log('Request payload:', { username, password });
+      console.log('==========================');
+      
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -59,7 +67,11 @@ export default function LoginScreen() {
         body: JSON.stringify({ username, password }),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', JSON.stringify(response.headers));
+      
       const json = await response.json();
+      console.log('Response body:', json);
 
       if (response.ok && json.status === 'success') {
         console.log('Login Response:', json.data);
@@ -90,6 +102,11 @@ export default function LoginScreen() {
       }
     } catch (error) {
       console.error('Login error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       alert('Login failed. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -176,7 +193,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
   },
   welcomeText: {
     fontSize: 28,
@@ -188,14 +206,16 @@ const styles = StyleSheet.create({
   subtitleText: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 32,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   formContainer: {
-    width: '100%',
-    borderRadius: 12,
-    padding: 20,
+    width: 320,
+    maxWidth: '100%',
+    borderRadius: 16,
+    padding: 18,
     backgroundColor: '#fff',
-    boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
+    elevation: 2,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -203,23 +223,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 50,
+    marginBottom: 14,
+    paddingHorizontal: 10,
+    height: 48,
   },
   inputIcon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    height: 50,
+    height: 48,
     fontSize: 16,
     color: '#333',
+    paddingVertical: 0,
   },
   loginButton: {
     backgroundColor: '#4CAF50',
     borderRadius: 8,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
     elevation: 2,
