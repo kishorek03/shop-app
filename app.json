@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "Shop App",
-    "slug": "shop-app",
-    "version": "1.0.0",
+    "name": "இயற்கை வனம்",
+    "displayName": "இயற்கை வனம்",
+    "slug": "iyarkaivanam-app",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/images/appicon.png",
     "userInterfaceStyle": "light",

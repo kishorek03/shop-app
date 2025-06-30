@@ -6,6 +6,7 @@ import { Alert, Platform, useWindowDimensions, View } from 'react-native';
 import { IconButton, Provider as PaperProvider } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CustomMenu } from '../../components/ui/CustomMenu';
+import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function TabsLayout() {
@@ -15,6 +16,7 @@ export default function TabsLayout() {
   const [isAdmin, setIsAdmin] = useState(false);
   const { t } = useLanguage();
   const { width, height } = useWindowDimensions();
+  const { logout } = useAuth();
 
   useEffect(() => {
     checkUserRole();
@@ -55,8 +57,8 @@ export default function TabsLayout() {
 
   const handleSignOutConfirmed = async () => {
     try {
-      await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
-      router.replace('/');
+      await logout();
+      router.replace('/login');
     } catch (error) {
       console.error('Log out error:', error);
       if (Platform.OS !== 'web') {

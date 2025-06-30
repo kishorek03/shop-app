@@ -1,8 +1,9 @@
 export default {
   expo: {
-    name: "Shop App",
-    slug: "shop-app",
-    version: "1.1.0",
+    name: "இயற்கை வனம்",
+    displayName: "இயற்கை வனம்",
+    slug: "iyarkaivanam-app",
+    version: "1.1.1",
     orientation: "portrait",
     icon: "./assets/images/appicon.png",
     scheme: "shopapp",
@@ -49,8 +50,6 @@ export default {
     updates: {
       url: "https://u.expo.dev/656cb6dd-c26b-4d00-9aeb-b860a914a13f"
     },
-    runtimeVersion: {
-      policy: "appVersion"
-    }
+    runtimeVersion: "1.1.0"
   }
 };

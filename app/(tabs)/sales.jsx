@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import RecordCashMovementModal from '../../components/RecordCashMovementModal';
 import getEnvConfig from '../../config/env';
 import { useLanguage } from '../../context/LanguageContext';
 import NotificationService from '../../services/NotificationService';
@@ -72,31 +74,49 @@ export default function SalesScreen() {
   const [dailySummary, setDailySummary] = useState({
     totalSales: 0,
     totalExpense: 0,
-    netAmount: 0,
     paymentMethodSales: {},
     salesBreakdown: [],
     expenseBreakdown: [],
+    openingCash: 0,
+    totalCashSalesToday: 0,
+    totalCashExpensesToday: 0,
+    netCashMovementsToday: 0,
+    currentCashBalance: 0,
   });
+
+  const scrollViewRef = useRef(null);
+  const saleItemRefs = useRef([]);
+  const [highlightedSaleIndex, setHighlightedSaleIndex] = useState(null);
+  const [blinkAnim] = useState(new Animated.Value(0));
 
   const [isModalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', data: [], type: '' });
+  const [isOpeningBalanceModalVisible, setOpeningBalanceModalVisible] = useState(false);
+  const [inputOpeningBalance, setInputOpeningBalance] = useState('');
+  const [isCashMovementModalVisible, setCashMovementModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 4,
-        useNativeDriver: Platform.OS !== 'web',
-      })
-    ]).start();
+  useFocusEffect(
+    React.useCallback(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 4,
+          useNativeDriver: Platform.OS !== 'web',
+        })
+      ]).start();
 
-    fetchInitialData();
-  }, []);
+      fetchInitialData();
+
+      // No cleanup needed for fetchInitialData, as it's a one-shot fetch on focus
+      // For animations, you might want to reset them here if needed on unfocus
+    }, [])
+  );
 
   const fetchInitialData = async () => {
     try {
@@ -127,15 +147,60 @@ export default function SalesScreen() {
   };
 
   const handleAddSale = () => {
-    setSales([...sales, { 
-      productId: '', 
-      quantity: '', 
-      salePrice: '', 
-      isParcel: false,
-      flavourId: '',
-      addOnId: '',
-      isCustomPrice: false
-    }]);
+    setSales(prevSales => {
+      const updatedSales = [...prevSales, { 
+        productId: '', 
+        quantity: '', 
+        salePrice: '', 
+        isParcel: false,
+        flavourId: '',
+        addOnId: '',
+        isCustomPrice: false
+      }];
+      const newIndex = updatedSales.length - 1;
+      setHighlightedSaleIndex(newIndex);
+
+      // Reset animation value and start blinking animation
+      blinkAnim.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: false,
+          }),
+          Animated.timing(blinkAnim, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: false,
+          }),
+        ]),
+        { iterations: 6 } 
+      ).start();
+
+      // Clear the highlight after 2 seconds
+      setTimeout(() => {
+        setHighlightedSaleIndex(null);
+        blinkAnim.setValue(0);
+      }, 2000);
+
+      // Scroll to the new item
+      setTimeout(() => {
+        if (scrollViewRef.current && saleItemRefs.current[newIndex]) {
+          saleItemRefs.current[newIndex].measureLayout(
+            scrollViewRef.current,
+            (x, y, width, height) => {
+              scrollViewRef.current.scrollTo({
+                y: y - 50, // Adjust offset to bring it into view with some padding
+                animated: true,
+              });
+            },
+            (error) => console.error('Measure layout error:', error)
+          );
+        }
+      }, 100); 
+      return updatedSales;
+    });
   };
 
   const removeSale = (index) => {
@@ -215,6 +280,51 @@ export default function SalesScreen() {
     return sales.reduce((total, sale) => {
       return total + (parseFloat(sale.salePrice) || 0);
     }, 0).toFixed(2);
+  };
+
+  const handleSaveOpeningBalance = async () => {
+    const amount = parseFloat(inputOpeningBalance);
+    if (isNaN(amount) || amount < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid opening balance.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        router.replace('/');
+        return;
+      }
+
+      const today = new Date();
+      const businessDate = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+      const response = await fetch(`${API_BASE_URL}/daily-cash-balance/today`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ businessDate, amount, userId: 'admin' }), // Replace 'admin' with actual userId if available
+      });
+
+      const json = await response.json();
+
+      if (response.ok && json.status === 'success') {
+        Alert.alert('Success', 'Opening balance saved successfully!');
+        setOpeningBalanceModalVisible(false);
+        fetchDashboardSummary(); // Refresh summary after saving
+      } else {
+        Alert.alert('Error', json.message || 'Failed to save opening balance.');
+      }
+    } catch (error) {
+      console.error('Error saving opening balance:', error);
+      Alert.alert('Error', 'Failed to save opening balance. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmitOrder = async () => {
@@ -336,9 +446,19 @@ export default function SalesScreen() {
   }, [products, flavours]);
 
   const fetchDashboardSummary = async () => {
+    // Prevent multiple simultaneous calls
+    if (isRefreshing) {
+      console.log('Dashboard refresh already in progress, skipping...');
+      return;
+    }
+
     try {
+      setIsRefreshing(true);
       const token = await AsyncStorage.getItem('accessToken');
-      if (!token) return;
+      if (!token) {
+        router.replace('/login');
+        return;
+      }
 
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -346,37 +466,40 @@ export default function SalesScreen() {
 
       const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000).toISOString();
       const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000).toISOString();
+      
+      // Get today's date in YYYY-MM-DD format reliably
+      const todayDate = today.toISOString().split('T')[0];
 
       const headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       };
 
-      const [salesSummaryResponse, salesDetailsResponse, expensesResponse] = await Promise.all([
+      const [salesSummaryResponse, salesDetailsResponse, expensesResponse, openingBalanceResponse, netCashMovementResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/orders/summary?start=${startUTC}&end=${endUTC}`, { headers }),
         fetch(`${API_BASE_URL}/sales/fetch?startDate=${startUTC}&endDate=${endUTC}`, { headers }),
-        fetch(`${API_BASE_URL}/expenses?start=${startUTC}&end=${endUTC}`, { headers })
+        fetch(`${API_BASE_URL}/expenses?start=${startUTC}&end=${endUTC}`, { headers }),
+        fetch(`${API_BASE_URL}/daily-cash-balance/today`, { headers }),
+        fetch(`${API_BASE_URL}/cash-movements/net-movement?date=${todayDate}`, { headers })
       ]);
 
       let totalSales = 0;
       const paymentMethodSales = {};
       let salesBreakdown = [];
+      let totalCashSalesToday = 0;
 
       if (salesSummaryResponse.ok && salesDetailsResponse.ok) {
         const salesSummaryData = await salesSummaryResponse.json();
         const salesDetailsData = await salesDetailsResponse.json();
 
         if (salesSummaryData.status === 'success' && Array.isArray(salesSummaryData.data)) {
-          // Create a map of orders from the summary
           const ordersMap = new Map(salesSummaryData.data.map(order => [order.id, { ...order, sales: [] }]));
 
-          // Group detailed sales under their parent order
           if (salesDetailsData && Array.isArray(salesDetailsData.data)) {
             salesDetailsData.data.forEach(sale => {
               if (ordersMap.has(sale.orderId)) {
                 const order = ordersMap.get(sale.orderId);
                 
-                // Find product and flavour names from component state
                 const product = products.find(p => p.id === sale.productId);
                 const flavour = flavours.find(f => f.id === sale.flavourId);
 
@@ -386,7 +509,6 @@ export default function SalesScreen() {
                   flavourName: flavour ? flavour.name : null
                 });
                 
-                // If the order from summary doesn't have a date, use the one from the sales item
                 if (!order.createdAt && sale.createdAt) {
                   order.createdAt = sale.createdAt;
                 }
@@ -396,7 +518,6 @@ export default function SalesScreen() {
           
           salesBreakdown = Array.from(ordersMap.values());
 
-          // Calculate totals from the summary data
           salesBreakdown.forEach(order => {
             totalSales += order.totalAmount;
             const paymentMethod = (order.paymentMethod || 'Unknown').trim().toUpperCase();
@@ -404,31 +525,86 @@ export default function SalesScreen() {
               paymentMethodSales[paymentMethod] = 0;
             }
             paymentMethodSales[paymentMethod] += order.totalAmount;
+
+            if (paymentMethod === 'CASH') {
+              totalCashSalesToday += order.totalAmount;
+            }
           });
         }
       }
 
       let totalExpense = 0;
       let expenseBreakdown = [];
+      let totalCashExpensesToday = 0;
       if (expensesResponse.ok) {
         const expenseData = await expensesResponse.json();
         if (expenseData.status === 'success' && Array.isArray(expenseData.data)) {
           expenseBreakdown = expenseData.data;
-          totalExpense = expenseData.data.reduce((sum, expense) => sum + expense.amount, 0);
+          totalExpense = expenseData.data.reduce((sum, expense) => {
+            if (expense.paymentMethodName.toUpperCase() === 'CASH') {
+              totalCashExpensesToday += expense.amount;
+            }
+            return sum + expense.amount;
+          }, 0);
         }
       }
+
+      let openingCash = 0;
+      if (openingBalanceResponse.ok) {
+        const obData = await openingBalanceResponse.json();
+        console.log('Opening balance response:', obData); // Debug log
+        if (obData.status === 'success' && obData.data !== undefined) {
+          // Handle both formats: data.amount and data as direct number
+          if (typeof obData.data === 'number') {
+            openingCash = parseFloat(obData.data);
+          } else if (obData.data && obData.data.amount !== undefined) {
+            openingCash = parseFloat(obData.data.amount);
+          } else {
+            openingCash = 0;
+          }
+          setInputOpeningBalance(openingCash.toString());
+        } else {
+          // If no opening balance for today, set to 0
+          openingCash = 0;
+          setInputOpeningBalance('0');
+        }
+      }
+
+      let netCashMovementsToday = 0;
+      if (netCashMovementResponse.ok) {
+        const nmData = await netCashMovementResponse.json();
+        console.log('Net cash movement response:', nmData); // Debug log
+        if (nmData.status === 'success' && nmData.data !== undefined) {
+          // Handle both formats: data.netAmount and data as direct number
+          if (typeof nmData.data === 'number') {
+            netCashMovementsToday = parseFloat(nmData.data);
+          } else if (nmData.data && nmData.data.netAmount !== undefined) {
+            netCashMovementsToday = parseFloat(nmData.data.netAmount);
+          } else {
+            netCashMovementsToday = 0;
+          }
+        }
+      }
+      
+      const currentCashBalance = openingCash + totalCashSalesToday - totalCashExpensesToday + netCashMovementsToday;
 
       setDailySummary({
         totalSales,
         totalExpense,
-        netAmount: totalSales - totalExpense,
         paymentMethodSales,
         salesBreakdown,
         expenseBreakdown,
+        openingCash,
+        totalCashSalesToday,
+        totalCashExpensesToday,
+        netCashMovementsToday,
+        currentCashBalance,
       });
 
     } catch (error) {
       console.error('Error fetching dashboard summary:', error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -442,6 +618,12 @@ export default function SalesScreen() {
   }, [products, paymentMethods]);
 
   const handleRefresh = () => {
+    // Prevent multiple rapid refreshes
+    if (isRefreshing) {
+      console.log('Refresh already in progress, skipping...');
+      return;
+    }
+
     refreshAnim.setValue(0);
     Animated.timing(refreshAnim, {
       toValue: 1,
@@ -479,6 +661,7 @@ export default function SalesScreen() {
 
   return (
     <ScrollView 
+      ref={scrollViewRef}
       style={{ flex: 1, backgroundColor: '#fff' }}
       contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
       keyboardShouldPersistTaps="handled"
@@ -534,6 +717,7 @@ export default function SalesScreen() {
               style={styles.refreshButton}
               onPress={handleRefresh}
               activeOpacity={0.7}
+              disabled={isRefreshing}
             >
               <Animated.View
                 style={{
@@ -545,7 +729,11 @@ export default function SalesScreen() {
                   }]
                 }}
               >
-                <Ionicons name="refresh" size={20} color="#4CAF50" />
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#4CAF50" />
+                ) : (
+                  <Ionicons name="refresh" size={20} color="#4CAF50" />
+                )}
               </Animated.View>
             </TouchableOpacity>
           </View>
@@ -592,18 +780,43 @@ export default function SalesScreen() {
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryIconContainer}>
-                <Ionicons name="wallet-outline" size={24} color="#1E88E5" />
+                <Ionicons name="cash-outline" size={24} color="#28a745" />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#1E88E5' }]}>{t('netAmount')}</Text>
-                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.netAmount.toFixed(2)}</Text>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#28a745' }]}>{t('openingCash')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.openingCash.toFixed(2)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name="wallet-outline" size={24} color="#FFC107" />
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#FFC107' }]}>{t('currentCash')}</Text>
+                <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.currentCashBalance.toFixed(2)}</Text>
               </View>
             </View>
           </ScrollView>
         </View>
+
         <View style={{ backgroundColor: '#fdfdfd', padding: 8 }}>
           {sales.map((sale, index) => (
-            <View key={index} style={styles.saleContainer}>
+            <Animated.View
+              key={index} 
+              ref={el => (saleItemRefs.current[index] = el)}
+              style={[
+                styles.saleContainer,
+                highlightedSaleIndex === index && {
+                  backgroundColor: blinkAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#fff', '#e0ffe0'],
+                  }),
+                  borderColor: '#2E7D32',
+                  borderWidth: 2,
+                }
+              ]}
+            >
               <View style={styles.saleHeader}>
                 <Text
                   style={[
@@ -755,7 +968,7 @@ export default function SalesScreen() {
                   onChangeText={(value) => updateSale(index, 'salePrice', value)}
                 />
               </View>
-            </View>
+            </Animated.View>
           
           ))}
         </View>
@@ -768,21 +981,20 @@ export default function SalesScreen() {
 
           <View style={styles.paymentContainer}>
             <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('paymentMode')}</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={paymentMode}
-                onValueChange={setPaymentMode}
-                style={styles.picker}
-                mode="dropdown"
-              >
-                {paymentMethods.map((method) => (
-                  <Picker.Item 
-                    key={method.id}
-                    label={method.name}
-                    value={method.id.toString()}
-                  />
-                ))}
-              </Picker>
+            <View style={styles.radioGroupContainer}>
+              {paymentMethods.map((method) => (
+                <TouchableOpacity
+                  key={method.id}
+                  style={styles.radioButtonContainer}
+                  onPress={() => setPaymentMode(method.id.toString())}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.radioOuterCircle}>
+                    {paymentMode === method.id.toString() && <View style={styles.radioInnerCircle} />}
+                  </View>
+                  <Text style={[styles.radioLabel, { fontFamily }]}>{method.name}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>
@@ -861,6 +1073,50 @@ export default function SalesScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isOpeningBalanceModalVisible}
+        onRequestClose={() => setOpeningBalanceModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>{t('setOpeningBalance')}</Text>
+            <TextInput
+              style={[styles.input, { fontFamily, lineHeight: 26, paddingVertical: 8 }]}
+              placeholder={t('enterOpeningBalance')}
+              placeholderTextColor="#888"
+              keyboardType="numeric"
+              value={inputOpeningBalance}
+              onChangeText={setInputOpeningBalance}
+            />
+            <TouchableOpacity
+              style={[styles.button, styles.buttonClose, { backgroundColor: '#4CAF50' }]}
+              onPress={handleSaveOpeningBalance}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.textStyle}>{t('save')}</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonClose, { backgroundColor: '#E53935', marginTop: 10 }]}
+              onPress={() => setOpeningBalanceModalVisible(false)}
+            >
+              <Text style={styles.textStyle}>{t('cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <RecordCashMovementModal
+        isVisible={isCashMovementModalVisible}
+        onClose={() => setCashMovementModalVisible(false)}
+        onMovementRecorded={fetchDashboardSummary}
+      />
     </ScrollView>
   );
 }
@@ -963,7 +1219,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   inputContainer: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   label: {
     fontSize: 14,
@@ -1002,15 +1258,16 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 4,
     padding: 8,
-    fontSize: 13,
+    fontSize: 16,
     backgroundColor: '#fff',
-    height: 40,
+    height: 56,
     width: '100%',
+    textAlignVertical: 'center',
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   checkbox: {
     marginRight: 8,
@@ -1155,7 +1412,7 @@ const styles = StyleSheet.create({
   parcelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     justifyContent: 'space-between',
     paddingHorizontal: 5,
   },
@@ -1336,5 +1593,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1E88E5',
+  },
+  radioGroupContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+  },
+  radioButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+  },
+  radioOuterCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioInnerCircle: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CAF50',
+  },
+  radioLabel: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  highlightedSaleContainer: {
+    backgroundColor: '#e0ffe0',
+    borderColor: '#2E7D32',
+    borderWidth: 2,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    elevation: 2,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

@@ -1,7 +1,8 @@
 import * as Font from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import NotificationService from '../services/NotificationService';
 
@@ -52,29 +53,47 @@ export const useAppFont = () => {
   return useContext(FontContext);
 };
 
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (!payload.exp) return true;
+    // exp is in seconds, Date.now() is ms
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
 function RootLayoutNav() {
-  const { currentLanguage } = useLanguage();
-  const [fontFamily, setFontFamily] = useState('System');
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
 
   useEffect(() => {
-    // ... font loading logic ...
-    // Note: The font loading logic might need to be adjusted based on the original full file content.
-    // This is a simplified representation.
-    if (currentLanguage === 'ta') {
-      setFontFamily('NotoSansTamil-Regular');
-    } else {
-      setFontFamily('System');
+    if (!loading) {
+      if (!isAuthenticated && segments[0] !== 'login') {
+        router.replace('/login');
+      }
+      if (isAuthenticated && (segments[0] === 'login' || segments[0] === '')) {
+        router.replace('/(tabs)/sales');
+      }
     }
-  }, [currentLanguage]);
+  }, [loading, isAuthenticated, segments]);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
 
   return (
-    <FontContext.Provider value={{ fontFamily }}>
-      <Stack>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </FontContext.Provider>
+    <Stack>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="+not-found" />
+    </Stack>
   );
 }
 
@@ -109,9 +128,11 @@ export default function RootLayout() {
   }
 
   return (
-    <LanguageProvider>
-      <RootLayoutNav />
-    </LanguageProvider>
+    <AuthProvider>
+      <LanguageProvider>
+        <RootLayoutNav />
+      </LanguageProvider>
+    </AuthProvider>
   );
 }
 

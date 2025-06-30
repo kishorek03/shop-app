@@ -1,9 +1,12 @@
+import Constants from 'expo-constants';
+
 // Define the environment types
 type Environment = 'development' | 'qa' | 'production';
 
 // Get the current environment from app.config.js or default to production
 const getEnvironment = (): Environment => {
-  const env = 'production';
+  // Read from app.config.js -> extra.environment
+  const env = Constants.expoConfig?.extra?.environment || 'qa';
   return env as Environment;
 };
 

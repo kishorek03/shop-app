@@ -40,7 +40,7 @@ export default function ExpenseScreen() {
     amount: '',
     unitId: '',
     categoryId: '',
-    paymentMethodId: 1,
+    paymentMethodId: '',
     remarks: ''
   });
 
@@ -198,12 +198,20 @@ export default function ExpenseScreen() {
       
       if (data.status === 'success' && Array.isArray(data.data)) {
         setPaymentMethods(data.data);
-        // Set default payment mode to the first available method
-        if (data.data.length > 0 && !paymentMode) {
-          setPaymentMode(data.data[0].id.toString());
+        // Set default payment mode to cash (id: 1)
+        if (!paymentMode) {
+          setPaymentMode('cash');
         }
       } else {
         console.error('Invalid payment methods data format:', data);
+        // Fallback to default payment methods if API fails
+        setPaymentMethods([
+          { id: 1, name: 'CASH' },
+          { id: 2, name: 'UPI' }
+        ]);
+        if (!paymentMode) {
+          setPaymentMode('cash');
+        }
       }
     } catch (error) {
       console.error('Error fetching payment methods:', error);
@@ -213,7 +221,7 @@ export default function ExpenseScreen() {
         { id: 2, name: 'UPI' }
       ]);
       if (!paymentMode) {
-        setPaymentMode('1');
+        setPaymentMode('cash');
       }
     }
   };
@@ -258,9 +266,13 @@ export default function ExpenseScreen() {
         return;
       }
 
-      // Get the selected payment method
-      const selectedPaymentMethod = paymentMethods.find(method => method.id.toString() === paymentMode);
-      if (!selectedPaymentMethod) {
+      // Get the selected payment method ID based on UI selection
+      let paymentMethodId;
+      if (paymentMode === 'cash') {
+        paymentMethodId = 1;
+      } else if (paymentMode === 'upi') {
+        paymentMethodId = 2;
+      } else {
         Alert.alert('Error', 'Invalid payment method selected.');
         return;
       }
@@ -271,7 +283,7 @@ export default function ExpenseScreen() {
         amount: parseFloat(expense.amount),
         unitId: Number(expense.unitId), 
         categoryId: parseInt(expense.categoryId),
-        paymentMethodId: selectedPaymentMethod.id,
+        paymentMethodId: paymentMethodId,
         remarks: expense.remarks || ''
       };
 
@@ -303,12 +315,12 @@ export default function ExpenseScreen() {
           amount: '',
           unitId: '',
           categoryId: '',
-          paymentMethodId: 1,
+          paymentMethodId: '',
           remarks: ''
         });
         // Reset to first payment method
         if (paymentMethods.length > 0) {
-          setPaymentMode(paymentMethods[0].id.toString());
+          setPaymentMode('cash');
         }
 
         // Send expense notification

@@ -6,18 +6,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
@@ -246,8 +246,7 @@ export default function ReportScreen() {
       setLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
-        Alert.alert('Error', 'Please login first');
-        router.replace('/');
+        router.replace('/login');
         return;
       }
 
@@ -378,8 +377,7 @@ export default function ReportScreen() {
       setLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
-        Alert.alert('Error', 'Please login first');
-        router.replace('/');
+        router.replace('/login');
         return;
       }
 

@@ -1,7 +1,7 @@
 {
-  "name": "shop-app",
+  "name": "iyarkaivanam-app",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -27,7 +27,7 @@
     "expo-font": "~13.3.1",
     "expo-haptics": "~14.1.4",
     "expo-image": "~2.3.0",
-    "expo-linear-gradient": "^14.1.4",
+    "expo-linear-gradient": "~14.1.5",
     "expo-linking": "~7.1.5",
     "expo-router": "^5.0.7",
     "expo-splash-screen": "~0.30.8",
