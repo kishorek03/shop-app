@@ -620,7 +620,8 @@ export default function ExpenseScreen() {
                 }}
                 style={styles.picker}
                 dropdownIconColor="#4CAF50"
-                mode="dropdown"
+                mode="dialog"
+                prompt={t('selectUnit')}
                 enabled={units.length > 0}
               >
                 <Picker.Item label={t('selectUnit')} value="" color="#888" style={{ fontFamily }} />
@@ -629,6 +630,8 @@ export default function ExpenseScreen() {
                     key={`unit-${unit.id}`}
                     label={`${unit.name} (${unit.abbreviation || ''})`}
                     value={unit.id}
+                    color="#222"
+                    style={{ fontFamily }}
                   />
                 ))}
               </Picker>
@@ -661,7 +664,8 @@ export default function ExpenseScreen() {
               onValueChange={(value) => setExpense({ ...expense, categoryId: value })}
               style={styles.picker}
               dropdownIconColor="#4CAF50"
-              mode="dropdown"
+              mode="dialog"
+              prompt={t('selectCategory')}
               enabled={categories.length > 0}
             >
               <Picker.Item label={t('selectCategory')} value="" color="#888" style={{ fontFamily }} />
@@ -671,6 +675,8 @@ export default function ExpenseScreen() {
                     key={`category-${category.id}`}
                     label={category.categoryName}
                     value={category.id.toString()}
+                    color="#222"
+                    style={{ fontFamily }}
                   />
                 ) : null
               ))}
@@ -948,22 +954,19 @@ const styles = StyleSheet.create({
   pickerContainer: {
     borderWidth: 1,
     borderColor: '#4CAF50',
-    borderRadius: 4,
+    borderRadius: 6,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 56,
+    minHeight: 52,
     justifyContent: 'center',
     width: '100%',
-    paddingVertical: 0,
+    overflow: 'hidden',
   },
   picker: {
-    height: 50,
-    color: '#333',
-    backgroundColor: '#fff',
+    height: 52,
+    color: '#222',
+    backgroundColor: 'transparent',
     width: '100%',
-    fontSize: 16,
-    textAlignVertical: 'center',
-    paddingVertical: 0,
   },
   paymentModeContainer: {
     flexDirection: 'row',

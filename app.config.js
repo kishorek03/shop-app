@@ -23,7 +23,6 @@ export default {
       },
       edgeToEdgeEnabled: true,
       package: isQa ? "com.iyarkaivanam.shopapp.qa" : "com.iyarkaivanam.shopapp",
-      usesCleartextTraffic: true,
       permissions: [
         "android.permission.INTERNET",
         "android.permission.READ_EXTERNAL_STORAGE",

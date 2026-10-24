@@ -25,7 +25,6 @@
       },
       "package": "com.iyarkaivanam.shopapp",
       "versionCode": 1,
-      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.READ_EXTERNAL_STORAGE",

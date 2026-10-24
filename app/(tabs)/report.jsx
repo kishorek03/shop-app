@@ -22,6 +22,7 @@ import {
 import getEnvConfig from '../../config/env';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
 import { toLocalDate } from '../utils/date';
+import { useLanguage } from '../../context/LanguageContext';
 
 const { API_BASE_URL } = getEnvConfig();
 const { width } = Dimensions.get('window');
@@ -57,11 +58,16 @@ const EXPENSE_TABLE_WIDTH = Object.values(EXPENSE_COLUMN_WIDTHS).reduce((a, b) =
 
 export default function ReportScreen() {
   const router = useRouter();
+  const { t, language } = useLanguage();
+  const isTamil = language === 'ta';
+  const fontFamily = isTamil ? 'NotoSansTamil' : undefined;
+
   const [viewType, setViewType] = useState('sales'); 
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
   const [salesSummary, setSalesSummary] = useState(null);
   const [expenseData, setExpenseData] = useState([]);
+  const [pnlData, setPnlData] = useState(null);
   const [paymentSummary, setPaymentSummary] = useState([]);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [filterPeriod, setFilterPeriod] = useState('month');
@@ -121,8 +127,10 @@ export default function ReportScreen() {
   useEffect(() => {
     if (viewType === 'sales') {
       fetchReportData();
-    } else {
+    } else if (viewType === 'expense') {
       fetchExpenseData();
+    } else if (viewType === 'pnl') {
+      fetchPnLData();
     }
   }, [filterPeriod, startDate, endDate, viewType, selectedProductId, selectedFlavourId, selectedParcel]);
 
@@ -142,8 +150,10 @@ export default function ReportScreen() {
       // Reload data when the screen is focused
       if (viewType === 'sales') {
         fetchReportData();
-      } else {
+      } else if (viewType === 'expense') {
         fetchExpenseData();
+      } else if (viewType === 'pnl') {
+        fetchPnLData();
       }
     }, [viewType, filterPeriod, startDate, endDate, selectedProductId, selectedFlavourId, selectedParcel])
   );
@@ -488,6 +498,104 @@ export default function ReportScreen() {
     } catch (error) {
       console.error('Fetch error:', error);
       Alert.alert('Error', 'Failed to load expense data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPnLData = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        router.replace('/login');
+        return;
+      }
+
+      let fromDate;
+      let toDate;
+      const now = new Date();
+      let groupBy = 'MONTH';
+
+      switch (filterPeriod) {
+        case 'today': {
+          fromDate = toLocalDate(now);
+          toDate = toLocalDate(now);
+          groupBy = 'DAY';
+          break;
+        }
+        case 'week': {
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - 7);
+          fromDate = toLocalDate(weekStart);
+          toDate = toLocalDate(now);
+          groupBy = 'DAY';
+          break;
+        }
+        case 'month': {
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          fromDate = toLocalDate(monthStart);
+          toDate = toLocalDate(now);
+          groupBy = 'DAY';
+          break;
+        }
+        case 'year': {
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          fromDate = toLocalDate(yearStart);
+          toDate = toLocalDate(now);
+          groupBy = 'MONTH';
+          break;
+        }
+        case 'custom': {
+          if (startDate && endDate) {
+            fromDate = toLocalDate(startDate);
+            toDate = toLocalDate(endDate);
+            const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+            groupBy = diffDays <= 35 ? 'DAY' : 'MONTH';
+          }
+          break;
+        }
+        default: {
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          fromDate = toLocalDate(yearStart);
+          toDate = toLocalDate(now);
+          groupBy = 'MONTH';
+          break;
+        }
+      }
+
+      const queryParams = new URLSearchParams();
+      if (fromDate) queryParams.append('from', fromDate);
+      if (toDate) queryParams.append('to', toDate);
+      if (groupBy) queryParams.append('groupBy', groupBy);
+
+      const url = `${API_BASE_URL}/reports/pnl?${queryParams.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch PnL report');
+      }
+
+      const json = await response.json();
+      if (json.status === 'success' && json.data) {
+        setPnlData(json.data);
+      } else {
+        setPnlData(null);
+      }
+
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
+    } catch (error) {
+      console.error('PnL fetch error:', error);
+      Alert.alert('Error', 'Failed to load Profit & Loss report');
     } finally {
       setLoading(false);
     }
@@ -933,13 +1041,16 @@ export default function ReportScreen() {
                 }}
                 style={styles.picker}
                 dropdownIconColor="#4CAF50"
+                mode="dialog"
+                prompt="Select Product"
               >
-                <Picker.Item label="All Products" value="all" />
+                <Picker.Item label="All Products" value="all" color="#222" />
                 {Array.isArray(products) && products.map(product => (
                   <Picker.Item 
                     key={`product-${product.id}`}
                     label={`${product.name} (₹${product.unitPrice})`}
                     value={product.id.toString()}
+                    color="#222"
                   />
                 ))}
               </Picker>
@@ -955,13 +1066,16 @@ export default function ReportScreen() {
                   onValueChange={setSelectedFlavourId}
                   style={styles.picker}
                   dropdownIconColor="#4CAF50"
+                  mode="dialog"
+                  prompt="Select Flavour"
                 >
-                  <Picker.Item label="Select Flavour" value="all" />
+                  <Picker.Item label="Select Flavour" value="all" color="#222" />
                   {Array.isArray(availableFlavours) && availableFlavours.map(flavour => (
                     <Picker.Item 
                       key={`flavour-${flavour.id}`}
                       label={`${flavour.name} (+₹${flavour.price})`}
                       value={flavour.id.toString()}
+                      color="#222"
                     />
                   ))}
                 </Picker>
@@ -980,13 +1094,16 @@ export default function ReportScreen() {
                   onValueChange={setSelectedAddOnId}
                   style={styles.picker}
                   dropdownIconColor="#4CAF50"
+                  mode="dialog"
+                  prompt="Select Add-On"
                 >
-                  <Picker.Item label="Select Add-On" value="all" />
+                  <Picker.Item label="Select Add-On" value="all" color="#222" />
                   {Array.isArray(addOns) && addOns.map(addon => (
                     <Picker.Item 
                       key={`addon-${addon.id}`}
                       label={`${addon.name} (+₹${addon.price})`}
                       value={addon.id.toString()}
+                      color="#222"
                     />
                   ))}
                 </Picker>
@@ -1030,9 +1147,10 @@ export default function ReportScreen() {
       >
         <Text style={[
           styles.toggleText,
-          viewType === 'sales' && styles.toggleTextActive
+          viewType === 'sales' && styles.toggleTextActive,
+          { fontFamily }
         ]}>
-          Sales
+          {t('sales') || 'Sales'}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -1044,9 +1162,25 @@ export default function ReportScreen() {
       >
         <Text style={[
           styles.toggleText,
-          viewType === 'expense' && styles.toggleTextActive
+          viewType === 'expense' && styles.toggleTextActive,
+          { fontFamily }
         ]}>
-          Expense
+          {t('expense') || 'Expense'}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.toggleOption,
+          viewType === 'pnl' && styles.toggleOptionActive
+        ]}
+        onPress={() => setViewType('pnl')}
+      >
+        <Text style={[
+          styles.toggleText,
+          viewType === 'pnl' && styles.toggleTextActive,
+          { fontFamily }
+        ]}>
+          {t('pnl') || 'P&L'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -1140,7 +1274,7 @@ export default function ReportScreen() {
                 </View>
               ))}
             </>
-          ) : (
+          ) : viewType === 'expense' ? (
             <>
               <View style={styles.insightCard}>
                 <Text style={styles.insightLabel}>Total Expenses</Text>
@@ -1152,6 +1286,50 @@ export default function ReportScreen() {
                   <Text style={styles.insightValue}>₹{total.toFixed(2)}</Text>
                 </View>
               ))}
+            </>
+          ) : (
+            <>
+              <View style={[styles.insightCard, { borderLeftWidth: 3, borderLeftColor: (pnlData?.netProfitOrLoss || 0) >= 0 ? '#2E7D32' : '#D32F2F' }]}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>
+                  {(pnlData?.netProfitOrLoss || 0) >= 0 ? (t('netProfit') || 'Net Profit') : (t('netLoss') || 'Net Loss')}
+                </Text>
+                <Text style={[styles.insightValue, { color: (pnlData?.netProfitOrLoss || 0) >= 0 ? '#2E7D32' : '#D32F2F', fontSize: 16 }]}>
+                  ₹{(pnlData?.netProfitOrLoss || 0).toFixed(2)}
+                </Text>
+                <Text style={[styles.insightSubvalue, { fontSize: 11, color: '#555' }]}>
+                  {t('profitMargin') || 'Margin'}: {(pnlData?.profitMarginPercentage || 0).toFixed(1)}%
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>{t('totalAmount') || 'Total Sales'}</Text>
+                <Text style={styles.insightValue}>₹{(pnlData?.totalSales || 0).toFixed(2)}</Text>
+                <Text style={[styles.insightSubvalue, { fontSize: 11, color: '#666' }]}>
+                  {pnlData?.totalOrders || 0} orders
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>{t('cashSales') || 'Cash Sales'}</Text>
+                <Text style={styles.insightValue}>₹{(pnlData?.cashSales || 0).toFixed(2)}</Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>{t('upiSales') || 'UPI Sales'}</Text>
+                <Text style={styles.insightValue}>₹{(pnlData?.upiSales || 0).toFixed(2)}</Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily, color: '#D32F2F' }]}>{t('totalExpensesCount') || 'Total Expenses'}</Text>
+                <Text style={[styles.insightValue, { color: '#D32F2F' }]}>₹{(pnlData?.totalExpenses || 0).toFixed(2)}</Text>
+                <Text style={[styles.insightSubvalue, { fontSize: 11, color: '#666' }]}>
+                  {pnlData?.totalExpensesCount || 0} expenses
+                </Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>Cash Expenses</Text>
+                <Text style={[styles.insightValue, { color: '#D32F2F' }]}>₹{(pnlData?.cashExpenses || 0).toFixed(2)}</Text>
+              </View>
+              <View style={styles.insightCard}>
+                <Text style={[styles.insightLabel, { fontFamily }]}>UPI Expenses</Text>
+                <Text style={[styles.insightValue, { color: '#D32F2F' }]}>₹{(pnlData?.upiExpenses || 0).toFixed(2)}</Text>
+              </View>
             </>
           )}
         </ScrollView>
@@ -1202,37 +1380,138 @@ export default function ReportScreen() {
         {viewType === 'sales' && renderSalesSummaryCard()}
 
         {/* Table Section */}
-        <View style={styles.tableContainer}>
-          <View style={styles.tableHeaderContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-              <View style={{ width: viewType === 'sales' ? 700 : EXPENSE_TABLE_WIDTH }}>
-                {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
-                <FlatList
-                  data={viewType === 'sales' ? filteredData : expenseData}
-                  keyExtractor={(item, index) => `${item.id || item.orderId || ''}-${item.productId || ''}-${index}`}
-                  renderItem={viewType === 'sales' ? renderItem : renderExpenseItem}
-                  contentContainerStyle={styles.listContainer}
-                  scrollEnabled={false}
-                  ItemSeparatorComponent={() => <View style={styles.rowSeparator} />}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <Text style={styles.emptyText}>
-                        {viewType === 'sales' ? 'No sales records found' : 'No expense records found'}
-                      </Text>
+        {viewType === 'pnl' ? (
+          <View style={{ width: '100%' }}>
+            {/* Category Breakdown Card */}
+            {pnlData?.expenseBreakdown && pnlData.expenseBreakdown.length > 0 && (
+              <View style={styles.pnlCategoryCard}>
+                <View style={styles.summaryCardHeader}>
+                  <Ionicons name="pie-chart-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
+                  <Text style={[styles.summaryCardTitle, { fontFamily }]}>
+                    {t('categoryExpenseShare') || 'Expense Breakdown by Category'}
+                  </Text>
+                </View>
+                {pnlData.expenseBreakdown.map((cat, idx) => (
+                  <View key={`cat-${cat.categoryId || idx}`} style={styles.pnlCategoryRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={[styles.pnlCategoryName, { fontFamily }]}>{cat.categoryName}</Text>
+                        <Text style={styles.pnlCategoryAmount}>₹{(cat.totalAmount || 0).toFixed(2)} ({cat.percentageOfTotal}%)</Text>
+                      </View>
+                      <View style={styles.pnlProgressBarBg}>
+                        <View style={[styles.pnlProgressBarFill, { width: `${Math.min(cat.percentageOfTotal || 0, 100)}%` }]} />
+                      </View>
                     </View>
-                  )}
-                />
+                  </View>
+                ))}
               </View>
-            </ScrollView>
-            <TouchableOpacity 
-              style={styles.refreshButton}
-              onPress={() => viewType === 'sales' ? fetchReportData() : fetchExpenseData()}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="refresh" size={20} color="#fff" />
-            </TouchableOpacity>
+            )}
+
+            {/* Period Breakdown Table */}
+            <View style={styles.tableContainer}>
+              <View style={styles.tableHeaderContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                  <View style={{ width: 560 }}>
+                    <View style={styles.tableHeader}>
+                      <View style={[styles.headerCell, { width: 110 }]}>
+                        <Text style={[styles.headerText, { fontFamily }]}>{t('period') || 'Period'}</Text>
+                      </View>
+                      <View style={[styles.headerCell, { width: 110 }]}>
+                        <Text style={[styles.headerText, { fontFamily }]}>{t('sales') || 'Sales'}</Text>
+                      </View>
+                      <View style={[styles.headerCell, { width: 110 }]}>
+                        <Text style={[styles.headerText, { fontFamily }]}>{t('expense') || 'Expenses'}</Text>
+                      </View>
+                      <View style={[styles.headerCell, { width: 120 }]}>
+                        <Text style={[styles.headerText, { fontFamily }]}>{t('netPnL') || 'Net P&L'}</Text>
+                      </View>
+                      <View style={[styles.headerCell, { width: 90 }]}>
+                        <Text style={[styles.headerText, { fontFamily }]}>{t('profitMargin') || 'Margin'}</Text>
+                      </View>
+                    </View>
+                    <FlatList
+                      data={pnlData?.periods || []}
+                      keyExtractor={(item, index) => `${item.period}-${index}`}
+                      scrollEnabled={false}
+                      ItemSeparatorComponent={() => <View style={styles.rowSeparator} />}
+                      ListEmptyComponent={() => (
+                        <View style={styles.emptyContainer}>
+                          <Text style={[styles.emptyText, { fontFamily }]}>
+                            {t('noPnlData') || 'No profit & loss data available for this period'}
+                          </Text>
+                        </View>
+                      )}
+                      renderItem={({ item }) => (
+                        <View style={styles.tableRow}>
+                          <View style={[styles.cell, { width: 110 }]}>
+                            <Text style={[styles.cellText, { fontWeight: '600' }]}>{item.period}</Text>
+                            <Text style={{ fontSize: 10, color: '#888' }}>{item.orderCount} orders</Text>
+                          </View>
+                          <View style={[styles.cell, { width: 110 }]}>
+                            <Text style={[styles.cellText, { color: '#2E7D32', fontWeight: '600' }]}>₹{item.sales.toFixed(2)}</Text>
+                          </View>
+                          <View style={[styles.cell, { width: 110 }]}>
+                            <Text style={[styles.cellText, { color: '#D32F2F', fontWeight: '600' }]}>₹{item.expenses.toFixed(2)}</Text>
+                            <Text style={{ fontSize: 10, color: '#888' }}>{item.expenseCount} items</Text>
+                          </View>
+                          <View style={[styles.cell, { width: 120 }]}>
+                            <Text style={[styles.cellText, { color: item.netProfitOrLoss >= 0 ? '#2E7D32' : '#D32F2F', fontWeight: '700' }]}>
+                              ₹{item.netProfitOrLoss.toFixed(2)}
+                            </Text>
+                          </View>
+                          <View style={[styles.cell, { width: 90 }]}>
+                            <Text style={[styles.cellText, { fontWeight: '600' }]}>
+                              {item.profitMarginPercentage.toFixed(1)}%
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    />
+                  </View>
+                </ScrollView>
+                <TouchableOpacity 
+                  style={styles.refreshButton}
+                  onPress={fetchPnLData}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="refresh" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeaderContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                <View style={{ width: viewType === 'sales' ? 700 : EXPENSE_TABLE_WIDTH }}>
+                  {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
+                  <FlatList
+                    data={viewType === 'sales' ? filteredData : expenseData}
+                    keyExtractor={(item, index) => `${item.id || item.orderId || ''}-${item.productId || ''}-${index}`}
+                    renderItem={viewType === 'sales' ? renderItem : renderExpenseItem}
+                    contentContainerStyle={styles.listContainer}
+                    scrollEnabled={false}
+                    ItemSeparatorComponent={() => <View style={styles.rowSeparator} />}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>
+                          {viewType === 'sales' ? 'No sales records found' : 'No expense records found'}
+                        </Text>
+                      </View>
+                    )}
+                  />
+                </View>
+              </ScrollView>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={() => viewType === 'sales' ? fetchReportData() : fetchExpenseData()}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -1417,22 +1696,19 @@ const styles = StyleSheet.create({
   pickerContainer: {
     borderWidth: 1,
     borderColor: '#4CAF50',
-    borderRadius: 4,
+    borderRadius: 6,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 54,
+    minHeight: 52,
     justifyContent: 'center',
     width: '100%',
-    paddingVertical: 0,
+    overflow: 'hidden',
   },
   picker: {
-    height: 50,
-    color: '#333',
-    backgroundColor: '#fff',
+    height: 52,
+    color: '#222',
+    backgroundColor: 'transparent',
     width: '100%',
-    fontSize: 16,
-    textAlignVertical: 'center',
-    paddingVertical: 0,
   },
   modalOverlay: {
     flex: 1,
@@ -1670,5 +1946,45 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
     fontSize: 13,
     fontWeight: '600',
+  },
+  pnlCategoryCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 15,
+    marginTop: 15,
+    borderRadius: 12,
+    padding: 16,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.08)',
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2E7D32',
+  },
+  pnlCategoryRow: {
+    marginBottom: 10,
+  },
+  pnlCategoryName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  pnlCategoryAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#D32F2F',
+  },
+  pnlProgressBarBg: {
+    height: 8,
+    backgroundColor: '#EEEEEE',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 2,
+  },
+  pnlProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+  },
+  cellText: {
+    fontSize: 12,
+    color: '#333',
   },
 });

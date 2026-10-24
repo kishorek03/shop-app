@@ -75,9 +75,11 @@ export default function SalesScreen() {
   const [dailySummary, setDailySummary] = useState({
     totalSales: 0,
     totalExpense: 0,
+    totalMonthExpense: 0,
     paymentMethodSales: {},
     salesBreakdown: [],
     expenseBreakdown: [],
+    monthlyFlavours: [],
     openingCash: 0,
     totalCashSalesToday: 0,
     totalCashExpensesToday: 0,
@@ -465,18 +467,30 @@ export default function SalesScreen() {
       }
 
       const todayDate = toLocalDate();
+      const now = new Date();
+      const monthStartDate = toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
 
       const headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       };
 
-      const [salesSummaryResponse, salesDetailsResponse, expensesResponse, openingBalanceResponse, netCashMovementResponse] = await Promise.all([
+      const [
+        salesSummaryResponse, 
+        salesDetailsResponse, 
+        expensesResponse, 
+        openingBalanceResponse, 
+        netCashMovementResponse,
+        monthSalesResponse,
+        monthExpensesResponse
+      ] = await Promise.all([
         fetch(`${API_BASE_URL}/orders/summary?from=${todayDate}&to=${todayDate}`, { headers }),
         fetch(`${API_BASE_URL}/sales/fetch?from=${todayDate}&to=${todayDate}`, { headers }),
         fetch(`${API_BASE_URL}/expenses?from=${todayDate}&to=${todayDate}`, { headers }),
         fetch(`${API_BASE_URL}/daily-cash-balance/today`, { headers }),
-        fetch(`${API_BASE_URL}/cash-movements/net-movement?date=${todayDate}`, { headers })
+        fetch(`${API_BASE_URL}/cash-movements/net-movement?date=${todayDate}`, { headers }),
+        fetch(`${API_BASE_URL}/sales/fetch?from=${monthStartDate}&to=${todayDate}`, { headers }),
+        fetch(`${API_BASE_URL}/expenses?from=${monthStartDate}&to=${todayDate}`, { headers })
       ]);
 
       let totalSales = 0;
@@ -530,19 +544,77 @@ export default function SalesScreen() {
         }
       }
 
+      // Calculate monthly flavour totals (whichever is non-zero)
+      let monthlyFlavoursList = [];
+      if (monthSalesResponse && monthSalesResponse.ok) {
+        try {
+          const mSalesData = await monthSalesResponse.json();
+          const rawMSales = mSalesData && (Array.isArray(mSalesData.data) ? mSalesData.data : (mSalesData.data?.sales || []));
+          if (Array.isArray(rawMSales)) {
+            const flavourQtyMap = {};
+            rawMSales.forEach(sale => {
+              if (sale.flavourId && Number(sale.quantity) > 0) {
+                const flavour = flavours.find(f => f.id === sale.flavourId);
+                const name = flavour ? flavour.name : (sale.flavourName || `Flavour #${sale.flavourId}`);
+                flavourQtyMap[name] = (flavourQtyMap[name] || 0) + Number(sale.quantity);
+              }
+            });
+            monthlyFlavoursList = Object.entries(flavourQtyMap)
+              .map(([name, quantity]) => ({ name, quantity }))
+              .filter(item => item.quantity > 0)
+              .sort((a, b) => b.quantity - a.quantity);
+          }
+        } catch (e) {
+          console.error('Error processing monthly flavour sales:', e);
+        }
+      }
+
+      // Today's expenses (for physical drawer cash balance)
       let totalExpense = 0;
-      let expenseBreakdown = [];
       let totalCashExpensesToday = 0;
       if (expensesResponse.ok) {
         const expenseData = await expensesResponse.json();
         if (expenseData.status === 'success' && Array.isArray(expenseData.data)) {
-          expenseBreakdown = expenseData.data;
           totalExpense = expenseData.data.reduce((sum, expense) => {
-            if (expense.paymentMethodName.toUpperCase() === 'CASH') {
+            if (expense.paymentMethodName?.toUpperCase() === 'CASH') {
               totalCashExpensesToday += expense.amount;
             }
             return sum + expense.amount;
           }, 0);
+        }
+      }
+
+      // Monthly expenses (grouped by product/item)
+      let totalMonthExpense = 0;
+      let monthlyExpenseBreakdown = [];
+      if (monthExpensesResponse && monthExpensesResponse.ok) {
+        try {
+          const mExpData = await monthExpensesResponse.json();
+          const expList = Array.isArray(mExpData.data) ? mExpData.data : [];
+          const groupedItems = {};
+          expList.forEach(expense => {
+            const amt = Number(expense.amount || 0);
+            const qty = Number(expense.quantity || 0);
+            const itemName = (expense.expenseItemName || expense.item || 'Other').trim();
+            totalMonthExpense += amt;
+
+            if (!groupedItems[itemName]) {
+              groupedItems[itemName] = {
+                name: itemName,
+                totalAmount: 0,
+                totalQuantity: 0,
+                unitName: expense.unitName || '',
+                categoryName: expense.categoryName || ''
+              };
+            }
+            groupedItems[itemName].totalAmount += amt;
+            groupedItems[itemName].totalQuantity += qty;
+          });
+
+          monthlyExpenseBreakdown = Object.values(groupedItems)
+            .sort((a, b) => b.totalAmount - a.totalAmount);
+        } catch (e) {
+          console.error('Error processing monthly expenses:', e);
         }
       }
 
@@ -588,9 +660,11 @@ export default function SalesScreen() {
       setDailySummary({
         totalSales,
         totalExpense,
+        totalMonthExpense,
         paymentMethodSales,
         salesBreakdown,
-        expenseBreakdown,
+        expenseBreakdown: monthlyExpenseBreakdown,
+        monthlyFlavours: monthlyFlavoursList,
         openingCash,
         totalCashSalesToday,
         totalCashExpensesToday,
@@ -639,9 +713,10 @@ export default function SalesScreen() {
       });
     } else {
       setModalContent({
-        title: t('expenseBreakdown'),
+        title: `${t('monthlyExpenseBreakdown')} (${t('groupedByProduct')})`,
         data: dailySummary.expenseBreakdown,
         type: 'expenses',
+        total: dailySummary.totalMonthExpense,
       });
     }
     setModalVisible(true);
@@ -769,8 +844,8 @@ export default function SalesScreen() {
                   <Ionicons name="trending-down-outline" size={24} color="#e53935" />
                 </View>
                 <View style={styles.summaryContent}>
-                  <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#e53935' }]}>{t('totalExpense')}</Text>
-                  <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalExpense.toFixed(2)}</Text>
+                  <Text style={[styles.summaryLabel, { fontFamily, lineHeight: 20, paddingVertical: 2, color: '#e53935' }]}>{t('monthlyExpense')}</Text>
+                  <Text style={[styles.summaryValue, { fontFamily, lineHeight: 20, paddingVertical: 2 }]}>₹{dailySummary.totalMonthExpense.toFixed(2)}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -795,6 +870,28 @@ export default function SalesScreen() {
               </View>
             </View>
           </ScrollView>
+
+          {/* Monthly Flavour Sales (Non-zero) */}
+          {dailySummary.monthlyFlavours && dailySummary.monthlyFlavours.length > 0 && (
+            <View style={styles.monthlyFlavoursContainer}>
+              <View style={styles.monthlyFlavoursHeader}>
+                <Ionicons name="sparkles" size={16} color="#2E7D32" />
+                <Text style={[styles.monthlyFlavoursTitle, { fontFamily }]}>
+                  {t('monthlyFlavours')}
+                </Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                {dailySummary.monthlyFlavours.map((flavour, idx) => (
+                  <View key={`flavour-sum-${idx}`} style={styles.flavourChip}>
+                    <Text style={[styles.flavourChipName, { fontFamily }]}>{flavour.name}</Text>
+                    <View style={styles.flavourChipBadge}>
+                      <Text style={styles.flavourChipQty}>{flavour.quantity}</Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         <View style={{ backgroundColor: '#fdfdfd', padding: 8 }}>
@@ -849,7 +946,9 @@ export default function SalesScreen() {
                   selectedValue={sale.productId}
                   onValueChange={(value) => updateSale(index, 'productId', value)}
                   style={styles.picker}
-                  mode="dropdown"
+                  dropdownIconColor="#4CAF50"
+                  mode="dialog"
+                  prompt={t('selectProduct')}
                   enabled={products.length > 0}
                 >
                   <Picker.Item label={t('selectProduct')} value="" color="#888" style={{ fontFamily }} />
@@ -858,6 +957,8 @@ export default function SalesScreen() {
                       key={`product-${product.id}`}
                       label={`${product.name} (₹${product.unitPrice})`}
                       value={product.id.toString()}
+                      color="#222"
+                      style={{ fontFamily }}
                     />
                   ))}
                 </Picker>
@@ -871,14 +972,18 @@ export default function SalesScreen() {
                       selectedValue={sale.flavourId}
                       onValueChange={(value) => updateSale(index, 'flavourId', value)}
                       style={styles.picker}
-                      mode="dropdown"
+                      dropdownIconColor="#4CAF50"
+                      mode="dialog"
+                      prompt={t('selectFlavour')}
                     >
-                      <Picker.Item label={t('selectFlavour')} value="" style={{ fontFamily }} />
+                      <Picker.Item label={t('selectFlavour')} value="" color="#888" style={{ fontFamily }} />
                       {getAvailableFlavoursForProduct(sale.productId).map((flavour) => (
                         <Picker.Item 
                           key={`flavour-${flavour.id}`}
                           label={`${flavour.name} (+₹${flavour.price})`}
                           value={flavour.id.toString()}
+                          color="#222"
+                          style={{ fontFamily }}
                         />
                       ))}
                     </Picker>
@@ -894,14 +999,18 @@ export default function SalesScreen() {
                       selectedValue={sale.addOnId}
                       onValueChange={(value) => updateSale(index, 'addOnId', value)}
                       style={styles.picker}
-                      mode="dropdown"
+                      dropdownIconColor="#4CAF50"
+                      mode="dialog"
+                      prompt={t('addOn')}
                     >
-                      <Picker.Item label={t('noAddOn')} value="" style={{ fontFamily }} />
+                      <Picker.Item label={t('noAddOn')} value="" color="#888" style={{ fontFamily }} />
                       {addOns.map((addOn) => (
                         <Picker.Item 
                           key={`addon-${addOn.id}`}
                           label={`${addOn.name} (+₹${addOn.price})`}
                           value={addOn.id.toString()}
+                          color="#222"
+                          style={{ fontFamily }}
                         />
                       ))}
                     </Picker>
@@ -1024,11 +1133,24 @@ export default function SalesScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
-            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={[styles.modalTitle, { fontFamily }]}>{modalContent.title}</Text>
+
+            {modalContent.type === 'expenses' && (
+              <View style={styles.modalTotalHeader}>
+                <Text style={[styles.modalTotalLabel, { fontFamily }]}>{t('totalMonthExpense')}:</Text>
+                <Text style={[styles.modalTotalValue, { fontFamily }]}>₹{(modalContent.total || 0).toFixed(2)}</Text>
+              </View>
+            )}
+
             <FlatList
               data={modalContent.data}
-              keyExtractor={(item, index) => (item.id || item.expenseId || index).toString()}
-              style={{ width: '100%' }}
+              keyExtractor={(item, index) => (item.id || item.name || item.expenseId || index).toString()}
+              style={{ width: '100%', maxHeight: 400 }}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: '#888', fontFamily }}>No records found</Text>
+                </View>
+              }
               renderItem={({ item }) =>
                 modalContent.type === 'sales' ? (
                   <View style={styles.orderCard}>
@@ -1053,19 +1175,35 @@ export default function SalesScreen() {
                   </View>
                 ) : (
                   <View style={styles.breakdownItem}>
-                    <Text style={styles.breakdownText}>
-                      {(item.item || item.expenseItemName || '')} - {t((item.paymentMethodName || '').toLowerCase())}
-                    </Text>
-                    <Text style={styles.breakdownAmount}>₹{item.amount.toFixed(2)}</Text>
+                    <View style={{ flex: 1, marginRight: 10 }}>
+                      <Text style={[styles.breakdownText, { fontWeight: '700', color: '#1B5E20', fontSize: 15, fontFamily }]}>
+                        {item.name || item.item || item.expenseItemName || ''}
+                      </Text>
+                      {item.categoryName ? (
+                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2, fontFamily }}>
+                          {item.categoryName}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.breakdownAmount, { fontWeight: '700', color: '#E53935', fontSize: 15 }]}>
+                        ₹{(item.totalAmount !== undefined ? item.totalAmount : item.amount || 0).toFixed(2)}
+                      </Text>
+                      {item.totalQuantity > 0 ? (
+                        <Text style={{ fontSize: 12, color: '#555', marginTop: 2, fontWeight: '500' }}>
+                          {item.totalQuantity} {item.unitName || ''}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
                 )
               }
             />
             <TouchableOpacity
-              style={[styles.button, styles.buttonClose]}
+              style={[styles.button, styles.buttonClose, { marginTop: 15 }]}
               onPress={() => setModalVisible(!isModalVisible)}
             >
-              <Text style={styles.textStyle}>Close</Text>
+              <Text style={[styles.textStyle, { fontFamily }]}>{t('close') || 'Close'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1233,22 +1371,19 @@ const styles = StyleSheet.create({
   pickerContainer: {
     borderWidth: 1,
     borderColor: '#4CAF50',
-    borderRadius: 4,
+    borderRadius: 6,
     marginBottom: 8,
     backgroundColor: '#fff',
-    minHeight: 56,
+    minHeight: 52,
     justifyContent: 'center',
     width: '100%',
-    paddingVertical: 0,
+    overflow: 'hidden',
   },
   picker: {
-    height: 50,
-    color: '#333',
-    backgroundColor: '#fff',
+    height: 52,
+    color: '#222',
+    backgroundColor: 'transparent',
     width: '100%',
-    fontSize: 16,
-    textAlignVertical: 'center',
-    paddingVertical: 0,
   },
   input: {
     borderWidth: 1,
@@ -1648,5 +1783,70 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  monthlyFlavoursContainer: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  monthlyFlavoursHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  monthlyFlavoursTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  flavourChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderColor: '#A5D6A7',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    gap: 6,
+  },
+  flavourChipName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1B5E20',
+  },
+  flavourChipBadge: {
+    backgroundColor: '#2E7D32',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  flavourChipQty: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalTotalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  modalTotalLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#C62828',
+  },
+  modalTotalValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#C62828',
   },
 });
