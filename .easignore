@@ -1,0 +1,9 @@
+# EAS Build ignore
+/android
+/ios
+/node_modules
+/.git
+/dist
+/web-build
+.system_generated
+scratch

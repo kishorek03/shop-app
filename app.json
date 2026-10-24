@@ -2,7 +2,7 @@
   "expo": {
     "name": "இயற்கை வனம்",
     "displayName": "இயற்கை வனம்",
-    "slug": "iyarkaivanam-app",
+    "slug": "shop-app",
     "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/images/appicon.png",
@@ -24,7 +24,15 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.iyarkaivanam.shopapp",
-      "versionCode": 1
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

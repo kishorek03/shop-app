@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import getEnvConfig from '../../config/env';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
+import { toLocalDate } from '../utils/date';
 
 const { API_BASE_URL } = getEnvConfig();
 const { width } = Dimensions.get('window');
@@ -28,12 +29,12 @@ const { width } = Dimensions.get('window');
 // Define column widths for consistency
 const COLUMN_WIDTHS = {
   date: 110,
-  product: 130,
-  flavour: 100,
-  qty: 70,
+  product: 140,
+  flavour: 95,
+  qty: 95,
   price: 90,
-  total: 90,
-  type: 80,
+  total: 95,
+  type: 75,
   // Expense columns
   description: 160,
   amount: 100,
@@ -59,6 +60,7 @@ export default function ReportScreen() {
   const [viewType, setViewType] = useState('sales'); 
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
+  const [salesSummary, setSalesSummary] = useState(null);
   const [expenseData, setExpenseData] = useState([]);
   const [paymentSummary, setPaymentSummary] = useState([]);
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -122,7 +124,7 @@ export default function ReportScreen() {
     } else {
       fetchExpenseData();
     }
-  }, [filterPeriod, startDate, endDate, viewType]);
+  }, [filterPeriod, startDate, endDate, viewType, selectedProductId, selectedFlavourId, selectedParcel]);
 
   useEffect(() => {
     if (selectedProductId === 'all') {
@@ -143,7 +145,7 @@ export default function ReportScreen() {
       } else {
         fetchExpenseData();
       }
-    }, [viewType, filterPeriod, startDate, endDate])
+    }, [viewType, filterPeriod, startDate, endDate, selectedProductId, selectedFlavourId, selectedParcel])
   );
 
   const checkAccess = async () => {
@@ -226,16 +228,8 @@ export default function ReportScreen() {
 
   const applyDateFilter = () => {
     if (tempStartDate && tempEndDate) {
-      // Set start date to beginning of day (00:00:00)
-      const startOfDay = new Date(tempStartDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      // Set end date to end of day (23:59:59)
-      const endOfDay = new Date(tempEndDate);
-      endOfDay.setHours(23, 59, 59, 999);
-      
-      setStartDate(startOfDay);
-      setEndDate(endOfDay);
+      setStartDate(tempStartDate);
+      setEndDate(tempEndDate);
       setFilterPeriod('custom');
     }
     setShowDatePickerModal(false);
@@ -252,55 +246,49 @@ export default function ReportScreen() {
 
       let queryParams = new URLSearchParams();
       
-      if (filterPeriod !== 'custom' && filterPeriod !== 'all') {
+      if (filterPeriod !== 'all') {
         const now = new Date();
-        let startDate;
+        let fromDate;
+        let toDate;
         
         switch (filterPeriod) {
           case 'today': {
-            const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('startDate', startOfDay.toISOString());
-            queryParams.append('endDate', endOfDay.toISOString());
+            fromDate = toLocalDate(now);
+            toDate = toLocalDate(now);
             break;
           }
           case 'week': {
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() - 7);
-            weekStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('startDate', weekStart.toISOString());
-            queryParams.append('endDate', endOfDay.toISOString());
+            fromDate = toLocalDate(weekStart);
+            toDate = toLocalDate(now);
             break;
           }
           case 'month': {
             const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            monthStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('startDate', monthStart.toISOString());
-            queryParams.append('endDate', endOfDay.toISOString());
+            fromDate = toLocalDate(monthStart);
+            toDate = toLocalDate(now);
             break;
           }
           case 'year': {
             const yearStart = new Date(now.getFullYear(), 0, 1);
-            yearStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('startDate', yearStart.toISOString());
-            queryParams.append('endDate', endOfDay.toISOString());
+            fromDate = toLocalDate(yearStart);
+            toDate = toLocalDate(now);
+            break;
+          }
+          case 'custom': {
+            if (startDate && endDate) {
+              fromDate = toLocalDate(startDate);
+              toDate = toLocalDate(endDate);
+            }
             break;
           }
         }
-      } else if (filterPeriod === 'custom' && startDate && endDate) {
-        queryParams.append('startDate', startDate.toISOString());
-        queryParams.append('endDate', endDate.toISOString());
+
+        if (fromDate && toDate) {
+          queryParams.append('from', fromDate);
+          queryParams.append('to', toDate);
+        }
       }
 
       if (selectedProductId !== 'all') {
@@ -317,7 +305,10 @@ export default function ReportScreen() {
         queryParams.append('parcel', selectedParcel === 'yes');
       }
 
-      const salesResponse = await fetch(`${API_BASE_URL}/sales/fetch?${queryParams.toString()}`, {
+      const queryString = queryParams.toString();
+      const searchUrl = queryString ? `${API_BASE_URL}/sales/search?${queryString}` : `${API_BASE_URL}/sales/search`;
+
+      const salesResponse = await fetch(searchUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -329,9 +320,30 @@ export default function ReportScreen() {
       }
 
       const salesData = await salesResponse.json();
-      setReportData((salesData && Array.isArray(salesData.data)) ? salesData.data : []);
+      const responseData = salesData?.data;
 
-      const summaryResponse = await fetch(`${API_BASE_URL}/orders/summary?start=${queryParams.get('startDate')}&end=${queryParams.get('endDate')}`, {
+      let salesList = [];
+      let summaryObj = null;
+
+      if (responseData) {
+        if (Array.isArray(responseData)) {
+          salesList = responseData;
+        } else {
+          salesList = Array.isArray(responseData.sales) ? responseData.sales : [];
+          summaryObj = responseData.summary || null;
+        }
+      }
+
+      setReportData(salesList);
+      setSalesSummary(summaryObj);
+
+      const fromParam = queryParams.get('from');
+      const toParam = queryParams.get('to');
+      const summaryUrl = fromParam && toParam
+        ? `${API_BASE_URL}/orders/summary?from=${fromParam}&to=${toParam}`
+        : `${API_BASE_URL}/orders/summary`;
+
+      const summaryResponse = await fetch(summaryUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -383,55 +395,49 @@ export default function ReportScreen() {
 
       let queryParams = new URLSearchParams();
       
-      if (filterPeriod !== 'custom' && filterPeriod !== 'all') {
+      if (filterPeriod !== 'all') {
         const now = new Date();
-        let startDate;
+        let fromDate;
+        let toDate;
         
         switch (filterPeriod) {
           case 'today': {
-            const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('start', startOfDay.toISOString());
-            queryParams.append('end', endOfDay.toISOString());
+            fromDate = toLocalDate(now);
+            toDate = toLocalDate(now);
             break;
           }
           case 'week': {
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() - 7);
-            weekStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('start', weekStart.toISOString());
-            queryParams.append('end', endOfDay.toISOString());
+            fromDate = toLocalDate(weekStart);
+            toDate = toLocalDate(now);
             break;
           }
           case 'month': {
             const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            monthStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('start', monthStart.toISOString());
-            queryParams.append('end', endOfDay.toISOString());
+            fromDate = toLocalDate(monthStart);
+            toDate = toLocalDate(now);
             break;
           }
           case 'year': {
             const yearStart = new Date(now.getFullYear(), 0, 1);
-            yearStart.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-            
-            queryParams.append('start', yearStart.toISOString());
-            queryParams.append('end', endOfDay.toISOString());
+            fromDate = toLocalDate(yearStart);
+            toDate = toLocalDate(now);
+            break;
+          }
+          case 'custom': {
+            if (startDate && endDate) {
+              fromDate = toLocalDate(startDate);
+              toDate = toLocalDate(endDate);
+            }
             break;
           }
         }
-      } else if (filterPeriod === 'custom' && startDate && endDate) {
-        queryParams.append('start', startDate.toISOString());
-        queryParams.append('end', endDate.toISOString());
+
+        if (fromDate && toDate) {
+          queryParams.append('from', fromDate);
+          queryParams.append('to', toDate);
+        }
       }
 
       // Fetch expense data
@@ -495,26 +501,108 @@ export default function ReportScreen() {
     });
   }, [reportData]);
 
+  const formatQuantity = (qty) => {
+    if (qty === null || qty === undefined || qty === '') return '0';
+    const num = Number(qty);
+    if (isNaN(num)) return String(qty);
+    return num.toLocaleString('en-IN', {
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatAmount = (amt) => {
+    if (amt === null || amt === undefined || amt === '') return '0.00';
+    const num = Number(amt);
+    if (isNaN(num)) return String(amt);
+    return num.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const activeSummary = useMemo(() => {
+    if (salesSummary) {
+      return salesSummary;
+    }
+    if (!reportData || reportData.length === 0) {
+      return {
+        totalSalesCount: 0,
+        totalAmount: 0,
+        allSameUnit: true,
+        sameUnitName: '',
+        sameUnitAbbreviation: '',
+        sameUnitTotalQuantity: 0,
+        unitQuantities: [],
+      };
+    }
+
+    const unitsMap = new Map();
+    let totalAmt = 0;
+
+    reportData.forEach((sale) => {
+      const uName = sale.unitName || '';
+      const uAbbr = sale.unitAbbreviation || uName;
+      const qty = typeof sale.quantity === 'number' ? sale.quantity : Number(sale.quantity) || 0;
+      const amt = typeof sale.amount === 'number' ? sale.amount : (typeof sale.salePrice === 'number' ? sale.salePrice : 0);
+
+      totalAmt += amt;
+
+      const key = uName || uAbbr || 'unit';
+      if (!unitsMap.has(key)) {
+        unitsMap.set(key, {
+          unitName: uName,
+          unitAbbreviation: uAbbr,
+          totalQuantity: 0,
+          saleCount: 0,
+          totalAmount: 0,
+        });
+      }
+      const entry = unitsMap.get(key);
+      entry.totalQuantity += qty;
+      entry.saleCount += 1;
+      entry.totalAmount += amt;
+    });
+
+    const unitQuantities = Array.from(unitsMap.values());
+    const allSameUnit = unitQuantities.length <= 1;
+    const firstUnit = unitQuantities[0] || {};
+
+    return {
+      totalSalesCount: reportData.length,
+      totalAmount: totalAmt,
+      allSameUnit,
+      sameUnitName: firstUnit.unitName || '',
+      sameUnitAbbreviation: firstUnit.unitAbbreviation || '',
+      sameUnitTotalQuantity: firstUnit.totalQuantity || 0,
+      unitQuantities,
+    };
+  }, [salesSummary, reportData]);
+
   const insights = useMemo(() => {
     const safeReportData = Array.isArray(reportData) ? reportData : [];
     
-    const total = safeReportData.reduce((sum, item) => {
-      const amount = typeof item?.salePrice === 'number' ? item.salePrice : 0;
-      return sum + amount;
-    }, 0);
+    const total = salesSummary?.totalAmount !== undefined
+      ? Number(salesSummary.totalAmount)
+      : safeReportData.reduce((sum, item) => {
+          const amount = typeof item?.amount === 'number' ? item.amount : (typeof item?.salePrice === 'number' ? item.salePrice : 0);
+          return sum + amount;
+        }, 0);
 
-    const count = safeReportData.length;
+    const count = salesSummary?.totalSalesCount !== undefined
+      ? salesSummary.totalSalesCount
+      : safeReportData.length;
+
     const productSales = {};
     const parcelCount = safeReportData.filter(item => Boolean(item?.parcel)).length;
     const noFlavourCount = safeReportData.filter(item => !item?.flavourId).length;
     const noFlavourTotal = safeReportData
       .filter(item => !item?.flavourId)
-      .reduce((sum, item) => sum + (typeof item?.salePrice === 'number' ? item.salePrice : 0), 0);
+      .reduce((sum, item) => sum + (typeof item?.amount === 'number' ? item.amount : (typeof item?.salePrice === 'number' ? item.salePrice : 0)), 0);
 
     safeReportData.forEach(item => {
       if (item && typeof item.productId !== 'undefined' && item.productId !== null) {
         const productId = item.productId.toString();
-        const amount = typeof item.salePrice === 'number' ? item.salePrice : 0;
+        const amount = typeof item.amount === 'number' ? item.amount : (typeof item.salePrice === 'number' ? item.salePrice : 0);
         productSales[productId] = (productSales[productId] || 0) + amount;
       }
     });
@@ -532,6 +620,7 @@ export default function ReportScreen() {
     const topProduct = topProductId 
       ? products.find(p => p?.id?.toString() === topProductId)
       : null;
+    const topProductName = topProduct?.name || safeReportData.find(s => s?.productId?.toString() === topProductId)?.productName || 'NA';
 
     return {
       totalSales: total.toFixed(2),
@@ -540,14 +629,12 @@ export default function ReportScreen() {
       noFlavourCount,
       noFlavourTotal: noFlavourTotal.toFixed(2),
       paymentSummary,
-      topProduct: topProduct 
-        ? {
-            name: topProduct.name || 'NA',
-            amount: topProductAmount.toFixed(2)
-          }
-        : { name: 'NA', amount: '0.00' }
+      topProduct: {
+        name: topProductName,
+        amount: topProductAmount.toFixed(2)
+      }
     };
-  }, [reportData, products, paymentSummary]);
+  }, [reportData, products, paymentSummary, salesSummary]);
 
   const expenseInsights = useMemo(() => {
     const safeExpenseData = Array.isArray(expenseData) ? expenseData : [];
@@ -711,10 +798,77 @@ export default function ReportScreen() {
     </View>
   );
 
+  const renderSalesSummaryCard = () => {
+    const summary = activeSummary;
+    if (!summary) return null;
+
+    const isAllSameUnit = Boolean(summary.allSameUnit);
+    const unitQuantities = Array.isArray(summary.unitQuantities) ? summary.unitQuantities : [];
+
+    const sameUnitQty = formatQuantity(summary.sameUnitTotalQuantity);
+    const sameUnitLabel = summary.sameUnitName || summary.sameUnitAbbreviation || '';
+    const totalAmountFormatted = formatAmount(summary.totalAmount);
+    const totalSalesCount = summary.totalSalesCount ?? reportData.length;
+
+    return (
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryCardHeader}>
+          <Ionicons name="receipt-outline" size={18} color="#2e7d32" style={{ marginRight: 6 }} />
+          <Text style={styles.summaryCardTitle}>Sales Summary</Text>
+        </View>
+
+        {isAllSameUnit ? (
+          <View style={styles.summaryContent}>
+            <View style={styles.summaryLine}>
+              <Text style={styles.summaryLabel}>Total Quantity: </Text>
+              <Text style={styles.summaryValue}>
+                {sameUnitQty}{sameUnitLabel ? ` ${sameUnitLabel}` : ''}
+              </Text>
+            </View>
+            <View style={styles.summaryLine}>
+              <Text style={styles.summaryLabel}>Total Amount: </Text>
+              <Text style={styles.summaryValue}>₹{totalAmountFormatted}</Text>
+              <Text style={styles.summaryOrdersText}> ({totalSalesCount} orders)</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.summaryContent}>
+            <View style={styles.mixedQuantitiesSection}>
+              <Text style={styles.summaryLabel}>Total Quantities: </Text>
+              <View style={styles.chipsContainer}>
+                {unitQuantities.map((item, index) => {
+                  const qtyFormatted = formatQuantity(item.totalQuantity);
+                  const unitDisplay = item.unitName || item.unitAbbreviation || '';
+                  return (
+                    <View key={`uq-badge-${index}`} style={styles.unitBadge}>
+                      <Text style={styles.unitBadgeText}>
+                        {qtyFormatted} {unitDisplay}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={[styles.summaryLine, { marginTop: 6 }]}>
+              <Text style={styles.summaryLabel}>Total Amount: </Text>
+              <Text style={styles.summaryValue}>₹{totalAmountFormatted}</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderItem = ({ item }) => {
     const product = products.find(p => p?.id === item?.productId);
     const flavour = item?.flavourId ? flavours.find(f => f?.id === item.flavourId) : null;
     const addOn = item?.addOnId ? addOns.find(a => a?.id === item.addOnId) : null;
+
+    const productName = item?.productName || product?.name || 'NIL';
+    const unitText = item?.unitAbbreviation || item?.unitName || '';
+    const quantityDisplay = unitText ? `${item?.quantity ?? 'NIL'} ${unitText}` : `${item?.quantity ?? 'NIL'}`;
+    const unitPrice = typeof item?.salePrice === 'number' ? item.salePrice : 0;
+    const lineTotal = typeof item?.amount === 'number' ? item.amount : (typeof item?.salePrice === 'number' ? item.salePrice : 0);
 
     return (
       <View style={styles.tableRow}>
@@ -722,23 +876,23 @@ export default function ReportScreen() {
           <Text style={styles.cellText}>{formatDate(item?.createdAt) || 'NIL'}</Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.product }]}> 
-          <Text style={styles.productName}>{product?.name || 'NIL'}</Text>
+          <Text style={styles.productName}>{productName}</Text>
           <Text style={styles.categoryName}>
-            {flavour ? flavour.name : 'NIL'}
+            {item?.flavourName || (flavour ? flavour.name : 'NIL')}
             {addOn ? ` + ${addOn.name}` : ''}
           </Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.flavour }]}> 
-          <Text style={styles.cellText}>{flavour ? flavour.name : 'NIL'}</Text>
+          <Text style={styles.cellText}>{item?.flavourName || (flavour ? flavour.name : 'NIL')}</Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.qty }]}> 
-          <Text style={styles.cellText}>{item?.quantity || 'NIL'}</Text>
+          <Text style={styles.cellText}>{quantityDisplay}</Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.price }]}> 
-          <Text style={styles.cellText}>₹{(typeof item?.amount === 'number' ? item.amount : 0).toFixed(2)}</Text>
+          <Text style={styles.cellText}>₹{unitPrice.toFixed(2)}</Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.total }]}> 
-          <Text style={styles.cellText}>₹{(typeof item?.salePrice === 'number' ? item.salePrice : 0).toFixed(2)}</Text>
+          <Text style={styles.cellText}>₹{lineTotal.toFixed(2)}</Text>
         </View>
         <View style={[styles.cell, { width: COLUMN_WIDTHS.type }]}> 
           <Text style={styles.cellText}>{item?.parcel ? 'Yes' : 'No'}</Text>
@@ -933,7 +1087,7 @@ export default function ReportScreen() {
         <Text style={styles.cellText}>{formatDate(item?.createdAt) || 'NIL'}</Text>
       </View>
       <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.item }]}> 
-        <Text style={styles.cellText}>{item?.item || 'NIL'}</Text>
+        <Text style={styles.cellText}>{item?.item || item?.expenseItemName || 'NIL'}</Text>
       </View>
       <View style={[styles.cell, { width: EXPENSE_COLUMN_WIDTHS.quantity }]}> 
         <Text style={styles.cellText}>{item?.quantity || 'NIL'}</Text>
@@ -1044,6 +1198,9 @@ export default function ReportScreen() {
         {/* Date Picker Modal */}
         {renderDatePickerModal()}
 
+        {/* Summary Header Card - Only show for Sales view */}
+        {viewType === 'sales' && renderSalesSummaryCard()}
+
         {/* Table Section */}
         <View style={styles.tableContainer}>
           <View style={styles.tableHeaderContainer}>
@@ -1052,11 +1209,18 @@ export default function ReportScreen() {
                 {viewType === 'sales' ? renderHeader() : renderExpenseHeader()}
                 <FlatList
                   data={viewType === 'sales' ? filteredData : expenseData}
-                  keyExtractor={(item, index) => `${item.id || index}`}
+                  keyExtractor={(item, index) => `${item.id || item.orderId || ''}-${item.productId || ''}-${index}`}
                   renderItem={viewType === 'sales' ? renderItem : renderExpenseItem}
                   contentContainerStyle={styles.listContainer}
                   scrollEnabled={false}
                   ItemSeparatorComponent={() => <View style={styles.rowSeparator} />}
+                  ListEmptyComponent={() => (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>
+                        {viewType === 'sales' ? 'No sales records found' : 'No expense records found'}
+                      </Text>
+                    </View>
+                  )}
                 />
               </View>
             </ScrollView>
@@ -1153,7 +1317,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    minWidth: width * 1.1,
+    minWidth: 700,
   },
   headerCell: {
     fontSize: 11,
@@ -1167,7 +1331,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
     alignItems: 'center',
-    minWidth: width * 1.5, // Match header width
+    minWidth: 700,
   },
   cell: {
     fontSize: 11,
@@ -1431,5 +1595,80 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e0e0e0',
     marginHorizontal: 4,
+  },
+  summaryCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 15,
+    marginTop: 15,
+    marginBottom: 0,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.08)',
+    elevation: 2,
+  },
+  summaryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingBottom: 6,
+  },
+  summaryCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  summaryContent: {
+    marginTop: 2,
+  },
+  summaryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#555',
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  summaryOrdersText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  mixedQuantitiesSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  unitBadge: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#81C784',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginVertical: 2,
+  },
+  unitBadgeText: {
+    color: '#2E7D32',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

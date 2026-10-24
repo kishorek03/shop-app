@@ -12,21 +12,30 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "production"
       }
     },
     "qa": {
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "apk"
       },
       "distribution": "internal",
       "env": {
         "APP_ENV": "qa"
       }
     },
-    "production": {}
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "production"
+      }
+    }
   },
   "submit": {
     "production": {}
   }
-} 
+}

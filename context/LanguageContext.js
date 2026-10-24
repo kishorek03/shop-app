@@ -94,6 +94,15 @@ export const languages = {
     cancel: 'Cancel',
     appName: 'Iyarkai Vanam',
     appSubtitle: 'Transaction Management',
+    selectExpenseItem: 'Select Expense Item',
+    searchExpenseItem: 'Search item (English or தமிழ்)...',
+    customExpense: '+ Custom Expense / Other',
+    customExpenseOption: 'Custom Expense / Other',
+    customExpenseDesc: 'One-off unexpected expense (e.g. repair, festival)',
+    recurringItems: 'Recurring Expense Items',
+    browseCatalog: 'Browse Catalog Items',
+    customExpenseActive: 'Custom Expense Mode Active',
+    defaultPriceHint: 'Default price',
   },
   ta: {
     settings: 'அமைப்புகள்',
@@ -185,6 +194,15 @@ export const languages = {
     cancel: 'ரத்து செய்',
     appName: 'இயற்கை வனம்',
     appSubtitle: 'பரிவர்த்தனை மேலாண்மை',
+    selectExpenseItem: 'செலவு உருப்படியைத் தேர்ந்தெடுக்கவும்',
+    searchExpenseItem: 'உருப்படியைத் தேடுங்கள் (ஆங்கிலம் அல்லது தமிழ்)...',
+    customExpense: '+ தனிப்பயன் செலவு / மற்றவை',
+    customExpenseOption: 'தனிப்பயன் செலவு / மற்றவை',
+    customExpenseDesc: 'எதிர்பாராத செலவு (எ.கா. பழுது, திருவிழா)',
+    recurringItems: 'வழக்கமான செலவு உருப்படிகள்',
+    browseCatalog: 'உருப்படிகளைப் பார்க்கவும்',
+    customExpenseActive: 'தனிப்பயன் செலவு முறை',
+    defaultPriceHint: 'வழக்கமான விலை',
   }
 };
 

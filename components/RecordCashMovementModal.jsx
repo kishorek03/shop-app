@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import getEnvConfig from '../config/env';
 import { useLanguage } from '../context/LanguageContext';
+import { toLocalDate } from '../utils/date';
 
 const { API_BASE_URL } = getEnvConfig();
 
@@ -21,8 +22,7 @@ const RecordCashMovementModal = ({ isVisible, onClose, onMovementRecorded }) => 
       return;
     }
 
-    const today = new Date();
-    const businessDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    const businessDate = toLocalDate();
 
     let direction;
     // Determine direction based on type

@@ -25,6 +25,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import NotificationService from '../../services/NotificationService';
 import { useAppFont } from '../_layout';
 import { fetchMasterData, getAvailableFlavours } from '../utils/masterData';
+import { toLocalDate } from '../utils/date';
 
 const { API_BASE_URL } = getEnvConfig();
 
@@ -298,10 +299,9 @@ export default function SalesScreen() {
         return;
       }
 
-      const today = new Date();
-      const businessDate = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const businessDate = toLocalDate();
 
-      const response = await fetch(`${API_BASE_URL}/daily-cash-balance/today`, {
+      const response = await fetch(`${API_BASE_URL}/daily-cash-balance`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -310,12 +310,16 @@ export default function SalesScreen() {
         body: JSON.stringify({ businessDate, amount, userId: 'admin' }), // Replace 'admin' with actual userId if available
       });
 
-      const json = await response.json();
+      const json = await response.json().catch(() => ({}));
 
       if (response.ok && json.status === 'success') {
         Alert.alert('Success', 'Opening balance saved successfully!');
         setOpeningBalanceModalVisible(false);
         fetchDashboardSummary(); // Refresh summary after saving
+      } else if (response.status === 400 && (json.message?.toLowerCase().includes('already exists') || json.error?.toLowerCase().includes('already exists'))) {
+        Alert.alert('Info', json.message || 'Opening balance for this date already exists.');
+        setOpeningBalanceModalVisible(false);
+        fetchDashboardSummary();
       } else {
         Alert.alert('Error', json.message || 'Failed to save opening balance.');
       }
@@ -460,15 +464,7 @@ export default function SalesScreen() {
         return;
       }
 
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-
-      const startUTC = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000).toISOString();
-      const endUTC = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000).toISOString();
-      
-      // Get today's date in YYYY-MM-DD format reliably
-      const todayDate = today.toISOString().split('T')[0];
+      const todayDate = toLocalDate();
 
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -476,9 +472,9 @@ export default function SalesScreen() {
       };
 
       const [salesSummaryResponse, salesDetailsResponse, expensesResponse, openingBalanceResponse, netCashMovementResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/orders/summary?start=${startUTC}&end=${endUTC}`, { headers }),
-        fetch(`${API_BASE_URL}/sales/fetch?startDate=${startUTC}&endDate=${endUTC}`, { headers }),
-        fetch(`${API_BASE_URL}/expenses?start=${startUTC}&end=${endUTC}`, { headers }),
+        fetch(`${API_BASE_URL}/orders/summary?from=${todayDate}&to=${todayDate}`, { headers }),
+        fetch(`${API_BASE_URL}/sales/fetch?from=${todayDate}&to=${todayDate}`, { headers }),
+        fetch(`${API_BASE_URL}/expenses?from=${todayDate}&to=${todayDate}`, { headers }),
         fetch(`${API_BASE_URL}/daily-cash-balance/today`, { headers }),
         fetch(`${API_BASE_URL}/cash-movements/net-movement?date=${todayDate}`, { headers })
       ]);
@@ -495,8 +491,9 @@ export default function SalesScreen() {
         if (salesSummaryData.status === 'success' && Array.isArray(salesSummaryData.data)) {
           const ordersMap = new Map(salesSummaryData.data.map(order => [order.id, { ...order, sales: [] }]));
 
-          if (salesDetailsData && Array.isArray(salesDetailsData.data)) {
-            salesDetailsData.data.forEach(sale => {
+          const rawSales = salesDetailsData && (Array.isArray(salesDetailsData.data) ? salesDetailsData.data : (salesDetailsData.data?.sales || []));
+          if (Array.isArray(rawSales)) {
+            rawSales.forEach(sale => {
               if (ordersMap.has(sale.orderId)) {
                 const order = ordersMap.get(sale.orderId);
                 
@@ -1057,7 +1054,7 @@ export default function SalesScreen() {
                 ) : (
                   <View style={styles.breakdownItem}>
                     <Text style={styles.breakdownText}>
-                      {item.item} - {t(item.paymentMethodName.toLowerCase())}
+                      {(item.item || item.expenseItemName || '')} - {t((item.paymentMethodName || '').toLowerCase())}
                     </Text>
                     <Text style={styles.breakdownAmount}>₹{item.amount.toFixed(2)}</Text>
                   </View>

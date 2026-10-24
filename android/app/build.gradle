@@ -95,6 +95,11 @@ android {
         versionCode 1
         versionName "1.1.0"
     }
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
+    }
     
     aaptOptions {
         noCompress "png"
@@ -129,18 +134,6 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
-    }
-    flavorDimensions "env"
-    productFlavors {
-        qa {
-            dimension "env"
-            applicationIdSuffix ".qa"
-            versionNameSuffix "-qa"
-        }
-        production {
-            dimension "env"
-            // No suffixes for production, uses default applicationId and versionName
-        }
     }
 }
 

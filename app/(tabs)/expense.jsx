@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  FlatList,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -32,6 +34,11 @@ export default function ExpenseScreen() {
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [expenseItems, setExpenseItems] = useState([]);
+  const [selectedExpenseItem, setSelectedExpenseItem] = useState(null);
+  const [isCustomExpense, setIsCustomExpense] = useState(false);
+  const [itemSearchModalVisible, setItemSearchModalVisible] = useState(false);
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [paymentMode, setPaymentMode] = useState('');
   const [lastExpense, setLastExpense] = useState(null);
   const [expense, setExpense] = useState({
@@ -61,7 +68,35 @@ export default function ExpenseScreen() {
     fetchCategories();
     fetchUnits();
     fetchPaymentMethods();
+    fetchExpenseItems();
   }, []);
+
+  const fetchExpenseItems = async () => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/expense-items?activeOnly=true`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to fetch expense items, status:', response.status);
+        return;
+      }
+
+      const json = await response.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        const validItems = json.data.filter(item => item && item.id);
+        setExpenseItems(validItems);
+      }
+    } catch (error) {
+      console.error('Error fetching expense items:', error);
+    }
+  };
 
   const fetchUnits = async () => {
     try {
@@ -226,6 +261,62 @@ export default function ExpenseScreen() {
     }
   };
 
+  const filteredExpenseItems = useMemo(() => {
+    if (!itemSearchQuery.trim()) {
+      return expenseItems;
+    }
+    const q = itemSearchQuery.toLowerCase().trim();
+    return expenseItems.filter(item => {
+      const nameMatch = item.name && item.name.toLowerCase().includes(q);
+      const tamilMatch = item.tamilName && item.tamilName.toLowerCase().includes(q);
+      const categoryMatch = item.categoryName && item.categoryName.toLowerCase().includes(q);
+      return nameMatch || tamilMatch || categoryMatch;
+    });
+  }, [expenseItems, itemSearchQuery]);
+
+  const handleSelectExpenseItem = (item) => {
+    setSelectedExpenseItem(item);
+    setIsCustomExpense(false);
+    setItemSearchModalVisible(false);
+    setItemSearchQuery('');
+
+    const currentQty = parseFloat(expense.quantity) || 1;
+    const newAmount = item.defaultPrice != null 
+      ? (currentQty * parseFloat(item.defaultPrice)).toFixed(2)
+      : expense.amount;
+
+    setExpense(prev => ({
+      ...prev,
+      item: item.name,
+      categoryId: item.categoryId ? item.categoryId.toString() : prev.categoryId,
+      unitId: item.defaultUnitId ? Number(item.defaultUnitId) : prev.unitId,
+      quantity: prev.quantity || '1',
+      amount: newAmount || prev.amount,
+    }));
+  };
+
+  const handleSelectCustomExpense = () => {
+    setSelectedExpenseItem(null);
+    setIsCustomExpense(true);
+    setItemSearchModalVisible(false);
+    setItemSearchQuery('');
+    setExpense(prev => ({
+      ...prev,
+      item: '',
+    }));
+  };
+
+  const handleQuantityChange = (qty) => {
+    const newExpense = { ...expense, quantity: qty };
+    if (selectedExpenseItem && selectedExpenseItem.defaultPrice != null) {
+      const parsedQty = parseFloat(qty);
+      if (!isNaN(parsedQty) && parsedQty > 0) {
+        newExpense.amount = (parsedQty * parseFloat(selectedExpenseItem.defaultPrice)).toFixed(2);
+      }
+    }
+    setExpense(newExpense);
+  };
+
   const showSuccessMessage = () => {
     setShowSuccess(true);
     Animated.sequence([
@@ -246,7 +337,8 @@ export default function ExpenseScreen() {
   };
 
   const handleSubmitExpense = async () => {
-    const isValid = expense.item && expense.amount && expense.categoryId && expense.unitId;
+    const isItemValid = isCustomExpense ? !!expense.item?.trim() : !!selectedExpenseItem;
+    const isValid = isItemValid && expense.amount && expense.categoryId && expense.unitId;
 
     if (!isValid) {
       Alert.alert('Validation Error', 'Please fill in all required fields.');
@@ -277,15 +369,29 @@ export default function ExpenseScreen() {
         return;
       }
 
-      const expenseData = {
-        item: expense.item,
-        quantity: expense.quantity ? parseInt(expense.quantity) : 1,
-        amount: parseFloat(expense.amount),
-        unitId: Number(expense.unitId), 
-        categoryId: parseInt(expense.categoryId),
-        paymentMethodId: paymentMethodId,
-        remarks: expense.remarks || ''
-      };
+      let expenseData;
+      if (selectedExpenseItem) {
+        expenseData = {
+          expenseItemId: selectedExpenseItem.id,
+          quantity: expense.quantity ? parseFloat(expense.quantity) : 1,
+          amount: parseFloat(expense.amount),
+          unitId: Number(expense.unitId), 
+          categoryId: parseInt(expense.categoryId),
+          paymentMethodId: paymentMethodId,
+          remarks: expense.remarks || ''
+        };
+      } else {
+        expenseData = {
+          expenseItemId: null,
+          item: expense.item.trim(),
+          quantity: expense.quantity ? parseFloat(expense.quantity) : 1,
+          amount: parseFloat(expense.amount),
+          unitId: Number(expense.unitId), 
+          categoryId: parseInt(expense.categoryId),
+          paymentMethodId: paymentMethodId,
+          remarks: expense.remarks || ''
+        };
+      }
 
       console.log('Submitting expense data:', expenseData);
 
@@ -302,13 +408,19 @@ export default function ExpenseScreen() {
       console.log('Expense API Response:', json);
       
       if (response.status === 201 && json.status === 'success') {
+        const recordedItemName = selectedExpenseItem 
+          ? `${selectedExpenseItem.name}${selectedExpenseItem.tamilName ? ` (${selectedExpenseItem.tamilName})` : ''}`
+          : expenseData.item;
+
         setLastExpense({
           amount: expenseData.amount,
-          item: expenseData.item,
+          item: recordedItemName,
           timestamp: new Date().toISOString()
         });
         
         showSuccessMessage();
+        setSelectedExpenseItem(null);
+        setIsCustomExpense(false);
         setExpense({
           item: '',
           quantity: '',
@@ -327,7 +439,7 @@ export default function ExpenseScreen() {
         NotificationService.sendExpenseNotification({
           id: json.data?.id || 'New',
           amount: expenseData.amount,
-          item: expenseData.item,
+          item: recordedItemName,
           category: categories.find(cat => cat.id.toString() === expenseData.categoryId.toString())?.categoryName || 'Unknown'
         });
       } else {
@@ -403,14 +515,82 @@ export default function ExpenseScreen() {
 
       <View style={styles.formContainer}>
         <View style={styles.inputContainer}>
-          <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('item')}</Text>
-          <TextInput
-            style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
-            placeholder={t('enterItem')}
-            placeholderTextColor="#888"
-            value={expense.item}
-            onChangeText={(value) => setExpense({ ...expense, item: value })}
-          />
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, { fontFamily, lineHeight: 18, paddingVertical: 2 }]}>{t('item')}</Text>
+            {isCustomExpense ? (
+              <TouchableOpacity 
+                style={styles.switchModeButton}
+                onPress={() => setItemSearchModalVisible(true)}
+              >
+                <Ionicons name="list-outline" size={14} color="#2E7D32" />
+                <Text style={[styles.switchModeText, { fontFamily }]}>{t('browseCatalog')}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.switchModeButton}
+                onPress={handleSelectCustomExpense}
+              >
+                <Ionicons name="create-outline" size={14} color="#2E7D32" />
+                <Text style={[styles.switchModeText, { fontFamily }]}>{t('customExpense')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isCustomExpense ? (
+            <View>
+              <TextInput
+                style={[styles.input, { fontFamily, lineHeight: 22, paddingVertical: 6 }]}
+                placeholder={t('enterItem')}
+                placeholderTextColor="#888"
+                value={expense.item}
+                onChangeText={(value) => setExpense({ ...expense, item: value })}
+              />
+              <Text style={[styles.helperText, { fontFamily }]}>
+                {t('customExpenseDesc')}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.itemSelectorButton, selectedExpenseItem && styles.itemSelectorButtonSelected]}
+              onPress={() => setItemSearchModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.itemSelectorContent}>
+                {selectedExpenseItem ? (
+                  <View style={styles.selectedItemInfo}>
+                    <Text style={[styles.selectedItemTitle, { fontFamily }]}>
+                      {selectedExpenseItem.name}{selectedExpenseItem.tamilName ? ` (${selectedExpenseItem.tamilName})` : ''}
+                    </Text>
+                    <View style={styles.itemTagsRow}>
+                      {selectedExpenseItem.categoryName ? (
+                        <View style={styles.itemTag}>
+                          <Text style={[styles.itemTagText, { fontFamily }]}>{selectedExpenseItem.categoryName}</Text>
+                        </View>
+                      ) : null}
+                      {selectedExpenseItem.defaultUnitName ? (
+                        <View style={styles.itemTag}>
+                          <Text style={[styles.itemTagText, { fontFamily }]}>{selectedExpenseItem.defaultUnitName}</Text>
+                        </View>
+                      ) : null}
+                      {selectedExpenseItem.defaultPrice != null && (
+                        <View style={[styles.itemTag, styles.priceTag]}>
+                          <Text style={[styles.priceTagText, { fontFamily }]}>₹{selectedExpenseItem.defaultPrice}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.placeholderRow}>
+                    <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
+                    <Text style={[styles.placeholderText, { fontFamily }]}>
+                      {t('selectExpenseItem')}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Ionicons name="chevron-down" size={20} color="#4CAF50" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.rowContainer}>
@@ -422,7 +602,7 @@ export default function ExpenseScreen() {
               placeholderTextColor="#888"
               keyboardType="numeric"
               value={expense.quantity}
-              onChangeText={(value) => setExpense({ ...expense, quantity: value })}
+              onChangeText={handleQuantityChange}
             />
           </View>
 
@@ -466,6 +646,11 @@ export default function ExpenseScreen() {
             value={expense.amount}
             onChangeText={(value) => setExpense({ ...expense, amount: value })}
           />
+          {selectedExpenseItem?.defaultPrice != null && (
+            <Text style={[styles.unitRateHint, { fontFamily }]}>
+              ₹{selectedExpenseItem.defaultPrice} × {expense.quantity || '1'} {units.find(u => u.id === expense.unitId)?.abbreviation || selectedExpenseItem.defaultUnitName || ''} = ₹{expense.amount || '0.00'}
+            </Text>
+          )}
         </View>
 
         <View style={styles.inputContainer}>
@@ -553,6 +738,149 @@ export default function ExpenseScreen() {
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Expense Item Search Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={itemSearchModalVisible}
+        onRequestClose={() => {
+          setItemSearchModalVisible(false);
+          setItemSearchQuery('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Ionicons name="pricetags-outline" size={20} color="#2E7D32" />
+                <Text style={[styles.modalTitle, { fontFamily }]}>{t('selectExpenseItem')}</Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => {
+                  setItemSearchModalVisible(false);
+                  setItemSearchQuery('');
+                }}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Input Bar */}
+            <View style={styles.searchBarContainer}>
+              <Ionicons name="search" size={18} color="#666" style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { fontFamily }]}
+                placeholder={t('searchExpenseItem')}
+                placeholderTextColor="#888"
+                value={itemSearchQuery}
+                onChangeText={setItemSearchQuery}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {itemSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setItemSearchQuery('')} style={styles.searchClearButton}>
+                  <Ionicons name="close-circle" size={18} color="#888" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* List of Items */}
+            <FlatList
+              data={filteredExpenseItems}
+              keyExtractor={(item) => `expense-item-${item.id}`}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <View>
+                  {/* Top Option: + Custom Expense / Other */}
+                  <TouchableOpacity
+                    style={[styles.customExpenseOptionCard, isCustomExpense && styles.customExpenseOptionCardActive]}
+                    onPress={handleSelectCustomExpense}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.customExpenseIconContainer}>
+                      <Ionicons name="add-circle" size={24} color="#2E7D32" />
+                    </View>
+                    <View style={styles.customExpenseTextContainer}>
+                      <Text style={[styles.customExpenseOptionTitle, { fontFamily }]}>
+                        {t('customExpense')}
+                      </Text>
+                      <Text style={[styles.customExpenseOptionDesc, { fontFamily }]}>
+                        {t('customExpenseDesc')}
+                      </Text>
+                    </View>
+                    {isCustomExpense && (
+                      <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.sectionDivider}>
+                    <Text style={[styles.sectionTitle, { fontFamily }]}>
+                      {t('recurringItems')} ({filteredExpenseItems.length})
+                    </Text>
+                  </View>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const isSelected = selectedExpenseItem?.id === item.id;
+                return (
+                  <TouchableOpacity
+                    style={[styles.expenseItemRow, isSelected && styles.expenseItemRowSelected]}
+                    onPress={() => handleSelectExpenseItem(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.itemMainInfo}>
+                      <Text style={[styles.itemRowTitle, { fontFamily }]}>
+                        {item.name}{item.tamilName ? ` (${item.tamilName})` : ''}
+                      </Text>
+                      <View style={styles.itemTagsRow}>
+                        {item.categoryName ? (
+                          <View style={styles.itemTag}>
+                            <Text style={[styles.itemTagText, { fontFamily }]}>{item.categoryName}</Text>
+                          </View>
+                        ) : null}
+                        {item.defaultUnitName ? (
+                          <View style={styles.itemTag}>
+                            <Text style={[styles.itemTagText, { fontFamily }]}>{item.defaultUnitName}</Text>
+                          </View>
+                        ) : null}
+                        {item.defaultPrice != null && (
+                          <View style={[styles.itemTag, styles.priceTag]}>
+                            <Text style={[styles.priceTagText, { fontFamily }]}>₹{item.defaultPrice}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {isSelected ? (
+                      <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyListContainer}>
+                  <Ionicons name="search-outline" size={32} color="#aaa" />
+                  <Text style={[styles.emptyListText, { fontFamily }]}>
+                    No items matching "{itemSearchQuery}"
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.emptyCustomButton}
+                    onPress={handleSelectCustomExpense}
+                  >
+                    <Text style={[styles.emptyCustomButtonText, { fontFamily }]}>
+                      {t('customExpense')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -770,6 +1098,245 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  switchModeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+  },
+  switchModeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 4,
+    marginLeft: 2,
+  },
+  unitRateHint: {
+    fontSize: 12,
+    color: '#2E7D32',
+    marginTop: 4,
+    marginLeft: 2,
+    fontWeight: '600',
+  },
+  itemSelectorButton: {
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
+  },
+  itemSelectorButtonSelected: {
+    backgroundColor: '#F1F8E9',
+    borderColor: '#4CAF50',
+  },
+  itemSelectorContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  selectedItemInfo: {
+    flexDirection: 'column',
+  },
+  selectedItemTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#1B5E20',
+    marginBottom: 4,
+  },
+  placeholderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#777',
+  },
+  itemTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  itemTag: {
+    backgroundColor: '#EAEAEA',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  itemTagText: {
+    fontSize: 11,
+    color: '#555',
+  },
+  priceTag: {
+    backgroundColor: '#C8E6C9',
+  },
+  priceTagText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '85%',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    paddingHorizontal: 10,
+    height: 44,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    paddingVertical: 6,
+  },
+  searchClearButton: {
+    padding: 4,
+  },
+  customExpenseOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  customExpenseOptionCardActive: {
+    backgroundColor: '#C8E6C9',
+    borderStyle: 'solid',
+  },
+  customExpenseIconContainer: {
+    marginRight: 10,
+  },
+  customExpenseTextContainer: {
+    flex: 1,
+  },
+  customExpenseOptionTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  customExpenseOptionDesc: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 2,
+  },
+  sectionDivider: {
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#777',
+    textTransform: 'uppercase',
+  },
+  expenseItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  expenseItemRowSelected: {
+    backgroundColor: '#F1F8E9',
+    borderRadius: 6,
+  },
+  itemMainInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  itemRowTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  emptyListContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyListText: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  emptyCustomButton: {
+    marginTop: 12,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  emptyCustomButtonText: {
+    color: '#fff',
+    fontSize: 13,
     fontWeight: 'bold',
   },
 });

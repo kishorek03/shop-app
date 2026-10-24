@@ -6,7 +6,7 @@ type Environment = 'development' | 'qa' | 'production';
 // Get the current environment from app.config.js or default to production
 const getEnvironment = (): Environment => {
   // Read from app.config.js -> extra.environment
-  const env = Constants.expoConfig?.extra?.environment || 'qa';
+  const env = Constants.expoConfig?.extra?.environment || 'production';
   return env as Environment;
 };
 
@@ -16,7 +16,7 @@ const ENV = {
     API_BASE_URL: 'http://192.168.55.32:8080/api',
   },
   qa: {
-    API_BASE_URL: 'https://transaction-manager.fly.dev/api', // Replace with your QA API URL
+    API_BASE_URL: 'http://143.244.134.163:8080/api', // Pointed to production since QA is inactive
   },
   production: {
     API_BASE_URL: 'http://143.244.134.163:8080/api', // Replace with your production API URL
