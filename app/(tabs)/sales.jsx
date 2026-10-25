@@ -622,12 +622,14 @@ export default function SalesScreen() {
       if (openingBalanceResponse.ok) {
         const obData = await openingBalanceResponse.json();
         console.log('Opening balance response:', obData); // Debug log
-        if (obData.status === 'success' && obData.data !== undefined) {
-          // Handle both formats: data.amount and data as direct number
+        if (obData.status === 'success' && obData.data !== undefined && obData.data !== null) {
+          // Handle both formats: data.amount and data as direct number or string
           if (typeof obData.data === 'number') {
-            openingCash = parseFloat(obData.data);
-          } else if (obData.data && obData.data.amount !== undefined) {
-            openingCash = parseFloat(obData.data.amount);
+            openingCash = parseFloat(obData.data) || 0;
+          } else if (typeof obData.data === 'string' && !isNaN(parseFloat(obData.data))) {
+            openingCash = parseFloat(obData.data) || 0;
+          } else if (obData.data && obData.data.amount !== undefined && obData.data.amount !== null) {
+            openingCash = parseFloat(obData.data.amount) || 0;
           } else {
             openingCash = 0;
           }
